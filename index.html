@@ -322,7 +322,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v5.5</b> · proyecto propio
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v5.6</b> · recordatorio directo a Outlook
   </footer>
 </div>
 
@@ -838,6 +838,17 @@ function linkGoogleCalendar(r){
     details:e.desc, location:"CSI Ingenieros",
   });
   return `https://calendar.google.com/calendar/render?${q.toString()}`;
+}
+/* Outlook / Microsoft 365 en el navegador: un toque, sin archivo.
+   Sirve igual desde el celular que desde la computadora.                */
+function linkOutlook(r){
+  const e=eventoDevolucion(r);
+  const q=new URLSearchParams({
+    path:"/calendar/action/compose", rru:"addevent",
+    subject:e.titulo, body:e.desc, location:"CSI Ingenieros",
+    startdt:e.ini.toISOString(), enddt:e.fin.toISOString(),
+  });
+  return `https://outlook.office.com/calendar/deeplink/compose?${q.toString()}`;
 }
 function descargarICS(r){
   const e=eventoDevolucion(r);
@@ -1550,14 +1561,18 @@ function mostrarConfirmacion(reservas, fallidas){
     <label class="fld">Agendá el recordatorio (te avisa ${CONFIG.recordatorioAntesMin} min antes)</label>
     <div class="btnrow">
       ${reservas.map(x=>`
-        <button class="btn ghost tiny" data-gcal="${esc(x.id)}">📅 Google · ${fechaCorta(x.fecha)}</button>
-        <button class="btn ghost tiny" data-ics="${esc(x.id)}">📥 Outlook · ${fechaCorta(x.fecha)}</button>`).join("")}
+        <button class="btn ghost tiny" data-outlook="${esc(x.id)}">📅 Outlook · ${fechaCorta(x.fecha)}</button>
+        <button class="btn ghost tiny" data-gcal="${esc(x.id)}">📅 Google · ${fechaCorta(x.fecha)}</button>`).join("")}
+    </div>
+    <div class="hint" style="margin-top:8px">¿Usás otro calendario? <button type="button" class="btn ghost tiny" data-icsall>📥 Descargar archivo .ics</button>
     </div>
     <div class="pinactions"><button class="btn" data-close>Listo</button></div>`, (w)=>{
       w.querySelectorAll("[data-gcal]").forEach(b=>b.addEventListener("click",()=>{
         const rr=buscarReserva(b.dataset.gcal); if(rr) window.open(linkGoogleCalendar(rr),"_blank"); }));
-      w.querySelectorAll("[data-ics]").forEach(b=>b.addEventListener("click",()=>{
-        const rr=buscarReserva(b.dataset.ics); if(rr) descargarICS(rr); }));
+      w.querySelectorAll("[data-outlook]").forEach(b=>b.addEventListener("click",()=>{
+        const rr=buscarReserva(b.dataset.outlook); if(rr) window.open(linkOutlook(rr),"_blank"); }));
+      const bi=w.querySelector("[data-icsall]");
+      if(bi) bi.addEventListener("click",()=>reservas.forEach(x=>{ const rr=buscarReserva(x.id); if(rr) descargarICS(rr); }));
   });
 }
 function cancelarReserva(id){
@@ -1967,10 +1982,14 @@ function menuCalendario(id){
       Te avisa ${CONFIG.recordatorioAntesMin} minutos antes de las <b>${esc(horaLimite(r))}</b>.</p>
     ${sig?`<div class="aviso-box">🤝 Después de vos lo usa <b>${esc(sig.nombre)}</b>, ${fechaLarga(sig.fecha)} a las ${inicioDe(sig)}.</div>`:""}
     <div class="btnrow">
+      <button class="btn ghost" data-o>📅 Outlook / Microsoft 365</button>
       <button class="btn ghost" data-g>📅 Google Calendar</button>
-      <button class="btn ghost" data-i>📥 Outlook / otro (.ics)</button>
+    </div>
+    <div class="hint" style="margin-top:10px">Los dos primeros abren el calendario con el evento cargado: un toque y listo, también desde el celular.<br>
+      <button type="button" class="btn ghost tiny" style="margin-top:6px" data-i>📥 Descargar archivo .ics</button> — para otros calendarios o Outlook de escritorio.
     </div>
     <div class="pinactions"><button class="btn" data-close>Cerrar</button></div>`, (w)=>{
+      w.querySelector("[data-o]").addEventListener("click",()=>window.open(linkOutlook(r),"_blank"));
       w.querySelector("[data-g]").addEventListener("click",()=>window.open(linkGoogleCalendar(r),"_blank"));
       w.querySelector("[data-i]").addEventListener("click",()=>descargarICS(r));
   });
