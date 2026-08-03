@@ -4,7 +4,7 @@
   RESERVA DE VEHÍCULOS · CSI  (ingreso por lista de nombres + PIN)
   ============================================================================
   · Misma base que la app de asientos: cada persona ENTRA ELIGIENDO SU NOMBRE.
-  · Usa el MISMO PIN que la app de asientos (comparte la colección "usuarios").
+  · Proyecto propio en Firebase ("reserva-auto"): cada persona crea su PIN acá.
   · Colecciones nuevas en Firestore: flota_reservas, flota_cc.
   · Reglas de Firestore: agregá flota_reservas y flota_cc con acceso por sesión.
 
@@ -241,7 +241,7 @@
   <section id="picker" class="picker" hidden>
     <div class="card">
       <h2>Elegí tu nombre</h2>
-      <p>Tocá tu nombre para entrar. Usás el mismo PIN que en la app de asientos.</p>
+      <p>Tocá tu nombre para entrar. La primera vez creás tu PIN de 4 dígitos.</p>
       <input id="buscar" type="text" placeholder="Buscar tu nombre…" autocomplete="off" style="margin-bottom:12px" />
       <div id="listaNombres" class="plist"></div>
       <div id="loginMsg" class="msg"></div>
@@ -322,7 +322,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v5.4</b> · 3 administradores
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v5.5</b> · proyecto propio
   </footer>
 </div>
 
@@ -333,15 +333,15 @@
 
 <script>
 /* ════════════════════════════════════════════════════════════════════════
-   1) CONFIGURACIÓN DE FIREBASE (mismo proyecto que la app de asientos)
+   1) CONFIGURACIÓN DE FIREBASE  ·  proyecto "reserva-auto"
    ════════════════════════════════════════════════════════════════════════ */
 const firebaseConfig = {
-  apiKey: "AIzaSyChO4ubyCBf_v8jyfdI8roM8H3D2uWSRfk",
-  authDomain: "puestos-de-oficina.firebaseapp.com",
-  projectId: "puestos-de-oficina",
-  storageBucket: "puestos-de-oficina.firebasestorage.app",
-  messagingSenderId: "880659797059",
-  appId: "1:880659797059:web:4578f65a1bf307281f30f6",
+  apiKey: "AIzaSyCnPKZC4-R-ZvkoiNJx7DuJQZ0cKjlImNY",
+  authDomain: "reserva-auto.firebaseapp.com",
+  projectId: "reserva-auto",
+  storageBucket: "reserva-auto.firebasestorage.app",
+  messagingSenderId: "1092342482939",
+  appId: "1:1092342482939:web:44d9232ecc56ecca8f6d5e",
 };
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -741,7 +741,7 @@ function renderPicker(filtro){
   if(state.authError) setLoginMsg(state.authError,"err");
 }
 async function hashPin(email, pin){
-  const raw="csi-puestos-2026::"+(email||"").toLowerCase()+"::"+pin;
+  const raw="csi-flota-2026::"+(email||"").toLowerCase()+"::"+pin;
   if(window.crypto && crypto.subtle){
     const buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
     return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
@@ -761,8 +761,8 @@ function mostrarPin(persona, u){
   w.innerHTML=`<div class="pincard">
       <div class="pintitle">Hola, ${esc(primerNombre)}</div>
       <p class="pinsub">${nuevo
-        ? "Creá tu PIN de 4 dígitos. Es el mismo que vas a usar en las apps de CSI."
-        : "Ingresá tu PIN de 4 dígitos (el mismo de la app de asientos)."}</p>
+        ? "Creá tu PIN de 4 dígitos para esta app. Podés usar el mismo de la app de asientos, así te acordás de uno solo."
+        : "Ingresá tu PIN de 4 dígitos."}</p>
       <input id="pin1" class="pininput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" />
       ${nuevo ? `<input id="pin2" class="pininput" type="password" inputmode="numeric" maxlength="4" placeholder="Repetí el PIN" autocomplete="off" />` : ``}
       <div id="pinMsg" class="pinmsg"></div>
