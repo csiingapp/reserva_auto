@@ -322,7 +322,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v5.3</b> · autos por CC · libreta y estacionamiento explícitos
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v5.4</b> · 3 administradores
   </footer>
 </div>
 
@@ -371,6 +371,7 @@ const PERSONAS = [
   { nombre:"Antonella Lobera",        email:"alobera@csi-ing.com", tel:"" },
   { nombre:"Antonio Martyniuk",       email:"amartyniuk@csi-ing.com", tel:"" },
   { nombre:"Aracely Gaona",           email:"agaonar@csi-ing.com", tel:"" },
+  { nombre:"Betina Decejas",          email:"bdecejas@csi-ing.com", tel:"" },
   { nombre:"Camila Fortunato",        email:"cfortunato@csi-ing.com", tel:"" },
   { nombre:"Catalina Peláez",         email:"cpelaez@csi-ing.com", tel:"" },
   { nombre:"Cecilia Volpe",           email:"cvolpe@csi-ing.com", tel:"" },
@@ -418,8 +419,11 @@ const PERSONAS = [
    cualquier reserva o devolución. Agregá el segundo mail acá.
    ════════════════════════════════════════════════════════════════════════ */
 const ADMINS = [
-  "rrojasr@csi-ing.com",
-  // "segundo.admin@csi-ing.com",   ← descomentá y poné el mail del 2º admin
+  "rrojasr@csi-ing.com",    // Rocío Rojas Romero
+  "bdecejas@csi-ing.com",   // Betina Decejas
+  "asaez@csi-ing.com",      // Ana Paula Sáez
+  // Para sumar otro: copiá una línea de arriba y cambiá el mail.
+  // El mail tiene que estar también en la lista PERSONAS.
 ];
 const soyAdmin = ()=> ADMINS.includes(state.uid);
 /* Solo el dueño de la reserva —o un administrador— puede tocarla */
