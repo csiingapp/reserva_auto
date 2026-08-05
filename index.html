@@ -322,7 +322,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.1</b> · auto sin devolver queda bloqueado
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.3</b> · demora de varios días
   </footer>
 </div>
 
@@ -599,9 +599,12 @@ function diasDisponibles(){
 const enHora=(f,hhmm)=> new Date(`${f}T${hhmm}:00${CONFIG.tz}`);
 /* Hora límite real: la demora avisada manda sobre la comprometida */
 const horaLimite=(r)=> r.demoraHora || r.horaDevolucion || (bloque(r.bloque)?bloque(r.bloque).devolucion:"17:30");
+/* Si alguien avisó que vuelve otro día, ese día manda sobre el de la reserva */
+const fechaLimite=(r)=> (r.demoraFecha && r.demoraFecha>r.fecha) ? r.demoraFecha : r.fecha;
+const demoraDeDias=(r)=> !!(r.demoraFecha && r.demoraFecha>r.fecha);
 function estadoDevolucion(r){
   if(r.devuelto) return "ok";
-  const t=ahoraMs(), lim=enHora(r.fecha, horaLimite(r)).getTime();
+  const t=ahoraMs(), lim=enHora(fechaLimite(r), horaLimite(r)).getTime();
   if(t >= lim) return "atrasada";
   if(t >= lim - CONFIG.avisoAntesMin*60000) return "pendiente";
   return "encurso";
@@ -933,12 +936,40 @@ function descargarICS(r){
 }
 
 /* ════════ WHATSAPP ════════ */
-function mensajeDemora(r, nuevaHora, motivo, sig){
+function mensajeDemora(r, nuevaHora, motivo, sig, hasta){
   const v=veh(r.vehiculo);
+  const cuando = (hasta && hasta>r.fecha)
+    ? `recién el ${fechaLarga(hasta)} a las ${nuevaHora}`
+    : `recién ${nuevaHora}`;
   return `Hola ${primerNombre(sig?sig.nombre:"")}, soy ${state.nombre}. `
-    + `Te aviso que el ${v?v.nombre:r.vehiculo} lo devuelvo recién ${nuevaHora} `
-    + `(estaba previsto ${r.horaDevolucion||horaLimite(r)}). Motivo: ${motivo.toLowerCase()}. `
+    + `Te aviso que el ${v?v.nombre:r.vehiculo} lo devuelvo ${cuando} `
+    + `(estaba previsto ${fechaLarga(r.fecha)} ${r.horaDevolucion||horaLimite(r)}). Motivo: ${motivo.toLowerCase()}. `
     + `Te escribo para que puedas organizarte. Cualquier cosa avisame.`;
+}
+/* Alguien ya tenía el auto reservado en los días que se extienden */
+function mostrarChoques(r, hasta, hora, mot, choques){
+  const v=veh(r.vehiculo);
+  abrirModal(`
+    <div class="pintitle">Aviso registrado, pero hay un cruce</div>
+    <p class="pinsub">Tu demora quedó anotada: devolvés el <b>${fechaLarga(hasta)}</b> a las <b>${esc(hora)}</b>.
+      Pero ${choques.length===1?"otra persona ya tenía":"otras personas ya tenían"} el ${esc(v?v.nombre:r.vehiculo)} reservado en esos días.
+      <b>Hay que avisarles.</b></p>
+    <div class="rowlist">${choques.map(x=>{ const t=telDe(x.ownerUid);
+      const msg=`Hola ${primerNombre(x.nombre)}, soy ${state.nombre}. Estoy en ${r.cc?"el proyecto "+r.cc:"el campo"} `
+        + `con el ${v?v.nombre:r.vehiculo} y no puedo volver antes del ${fechaLarga(hasta)}. `
+        + `Vi que lo tenías reservado el ${fechaLarga(x.fecha)}. Motivo: ${mot.toLowerCase()}. `
+        + `Perdón por el cambio, avisame cómo te ordenás.`;
+      return `<div class="row late"><div class="row-main">
+        <div class="row-nm">${esc(x.nombre)}</div>
+        <div class="row-meta">Lo tenía para el ${fechaLarga(x.fecha)} · CC ${esc(x.cc||"—")}</div></div>
+        <div class="row-acts">${t?`<button class="btn wa tiny" data-wach="${esc(t)}" data-msg="${esc(msg)}">💬 Avisar</button>`:""}
+          <button class="btn ghost tiny" data-copch="${esc(msg)}">📋 Copiar</button></div></div>`;
+    }).join("")}</div>
+    <div class="hint" style="margin-top:12px">Su reserva sigue en pie: si no van a poder usar el auto, que la cancelen ellos o pedile a una administradora que lo haga.</div>
+    <div class="pinactions"><button class="btn" data-close>Listo</button></div>`, (w)=>{
+      w.querySelectorAll("[data-wach]").forEach(b=>b.addEventListener("click",()=>window.open(linkWA(b.dataset.wach, b.dataset.msg),"_blank")));
+      w.querySelectorAll("[data-copch]").forEach(b=>b.addEventListener("click",()=>copiar(b.dataset.copch)));
+  });
 }
 const linkWA=(tel,msg)=> `https://wa.me/${String(tel).replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`;
 async function copiar(txt){
@@ -991,12 +1022,13 @@ function renderAutos(){
       const r = oc.ajeno || oc.mio;
       if(oc.ajeno){ cls="ocup"; estado=esc(r.nombre); dis='aria-disabled="true"'; }
       else { cls="mine"; estado="Tu reserva"; }
-      sub = `${etiquetaBloques(tomados)} · devuelve ${horaLimite(r)}${r.cc?` · CC ${esc(r.cc)}`:""}`;
+      sub = `${etiquetaBloques(tomados)} · ${r.devuelto?"devuelto":"devuelve"} ${horaLimite(r)}${r.cc?` · CC ${esc(r.cc)}`:""}`;
       if(soloEn) sub += ` · libre en ${libreEn(tomados, oc.activos)}`;
     } else if(state.pending===v.id){ cls="pend"; estado="Elegido"; sub="Confirmá abajo"; }
     const hoyStr=ymd(new Date());
     // el aviso solo se muestra donde importa: el día de la demora, o el día de hoy si quedó sin devolver
-    const dem=state.pendientes.filter(r=>r.vehiculo===v.id && r.demoraHora && !r.devuelto && r.fecha===state.fecha)[0];
+    const dem=state.pendientes.filter(r=>r.vehiculo===v.id && r.demoraHora && !r.devuelto
+      && (r.fecha===state.fecha || (demoraDeDias(r) && r.fecha<=state.fecha && r.demoraFecha>=state.fecha)))[0];
     const atras=state.pendientes.filter(r=>r.vehiculo===v.id && estadoDevolucion(r)==="atrasada"
         && (r.fecha===state.fecha || (state.fecha===hoyStr && r.fecha<hoyStr)))
       .sort((a,b)=> a.fecha<b.fecha?-1:1)[0];
@@ -1005,7 +1037,7 @@ function renderAutos(){
       sub=`No se puede reservar hasta cerrar la salida del ${fechaCorta(trabado[0].fecha)}`; }
     let flag="";
     if(trabado.length) flag=`<span class="auto-flag">⏰ sin devolver · ${esc(primerNombre(trabado[0].nombre))}, ${fechaCorta(trabado[0].fecha)}</span>`;
-    else if(dem) flag=`<span class="auto-flag">🕒 vuelve ~${esc(dem.demoraHora)} (${esc(primerNombre(dem.nombre))})</span>`;
+    else if(dem) flag=`<span class="auto-flag">🕒 vuelve ${demoraDeDias(dem)?fechaCorta(dem.demoraFecha)+" ":"~"}${esc(dem.demoraHora)} (${esc(primerNombre(dem.nombre))})</span>`;
     else if(atras) flag=`<span class="auto-flag">⏰ sin devolver · ${esc(primerNombre(atras.nombre))}, ${fechaCorta(atras.fecha)}</span>`;
     return `<button class="auto ${cls}" data-veh="${v.id}" ${dis}>
       <span class="auto-top"><span class="auto-emoji">${v.emoji}</span>
@@ -1028,10 +1060,10 @@ function renderDia(){
     const r=g[0], v=veh(r.vehiculo), bl=g.map(x=>x.bloque);
     const mio=esMia(r), dev=g.every(x=>x.devuelto), est=estadoDevolucion(r);
     const tags=[`<span class="tag cc">CC ${esc(r.cc||"—")}</span>`,
-                `<span class="tag hora">🕐 devuelve ${esc(horaLimite(r))}</span>`];
-    if(r.demoraHora && !dev) tags.push(`<span class="tag demora">🕒 demora avisada · ${esc(r.demoraMotivo||"")}</span>`);
+                `<span class="tag hora">🕐 ${dev?"debía devolver":"devuelve"} ${demoraDeDias(r)?fechaCorta(fechaLimite(r))+" ":""}${esc(horaLimite(r))}</span>`];
+    if(r.demoraHora && !dev) tags.push(`<span class="tag demora">🕒 ${demoraDeDias(r)?`vuelve ${fechaCorta(r.demoraFecha)} ${esc(r.demoraHora)}`:"demora avisada"} · ${esc(r.demoraMotivo||"")}</span>`);
     if(dev){
-      tags.push(`<span class="tag ok">✓ devuelto ${r.devueltoTs?esc(sellaFechaHora(r.devueltoTs)):""}</span>`);
+      tags.push(`<span class="tag ok">✓ devuelto el ${r.devueltoTs?esc(sellaFechaHora(r.devueltoTs)):"—"}</span>`);
       const gasto=g.reduce((s,x)=>s+(x.gastoNafta||0),0);
       if(gasto) tags.push(`<span class="tag nafta">⛽ ${moneda(gasto)}</span>`);
       const pj=g.reduce((s,x)=>s+(x.gastoPeaje||0),0);
@@ -1071,8 +1103,9 @@ function renderAvisoMio(){
       const v=veh(r.vehiculo), sig=proximoDistinto(r);
       return `<div class="row">
         <div class="row-main">
-          <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)} · devolución ${esc(horaLimite(r))}</div>
-          <div class="row-meta">${fechaLarga(r.fecha)} · CC ${esc(r.cc||"—")}${r.demoraHora?" · demora avisada":""}</div>
+          <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)} · devolución ${demoraDeDias(r)?`${fechaCorta(r.demoraFecha)} `:""}${esc(horaLimite(r))}</div>
+          <div class="row-meta">${fechaLarga(r.fecha)} · CC ${esc(r.cc||"—")}${
+            r.demoraHora?(demoraDeDias(r)?` · avisaste que volvés el ${fechaLarga(r.demoraFecha)}`:" · demora avisada"):""}</div>
           ${sig?`<div class="espera">🤝 Después de vos lo usa <b>${esc(sig.nombre)}</b>, ${fechaLarga(sig.fecha)} a las ${inicioDe(sig)}.</div>`
                :`<div class="espera">Nadie lo tiene reservado después. Igual dejá registrada la devolución.</div>`}
         </div>
@@ -1095,7 +1128,7 @@ function renderPendientes(){
       <div class="row-main">
         <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)} · ${esc(r.nombre)}</div>
         <div class="row-meta">${fechaLarga(r.fecha)} · comprometido ${esc(horaLimite(r))} · ${tarde?"ATRASADA":"por vencer"} · CC ${esc(r.cc||"—")}${
-          r.demoraHora?` · 🕒 avisó que vuelve ${esc(r.demoraHora)}`:""}${
+          r.demoraHora?` · 🕒 avisó que vuelve ${demoraDeDias(r)?fechaCorta(r.demoraFecha)+" ":""}${esc(r.demoraHora)}`:""}${
           sig?`<br>→ lo espera ${esc(sig.nombre)}, ${fechaLarga(sig.fecha)} ${inicioDe(sig)}`:""}</div>
       </div>
       <div class="row-acts">${puede
@@ -1451,7 +1484,7 @@ const nivelOptions=(sel)=>`<option value=""${sel?"":" selected"}>Elegí…</opti
 /* Salidas de días ya pasados que nadie cerró: el auto quedó sin devolver y no se sabe dónde está */
 function deudaVehiculo(vehId){
   const hoy=ymd(new Date());
-  const l=state.pendientes.filter(r=>r.vehiculo===vehId && r.fecha<hoy);
+  const l=state.pendientes.filter(r=>r.vehiculo===vehId && fechaLimite(r)<hoy);
   return [...new Map(l.map(r=>[`${r.fecha}__${r.ownerUid}`, r])).values()]
     .sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
@@ -1466,7 +1499,7 @@ const vehiculosAbiertos=(uid)=> [...new Set(abiertasDe(uid).map(r=>r.vehiculo))]
 /* Devoluciones de días ya pasados que la persona nunca registró */
 function deudasDevolucion(uid){
   const hoy=ymd(new Date());
-  const propias=state.pendientes.filter(r=>r.ownerUid===(uid||state.uid) && r.fecha<hoy);
+  const propias=state.pendientes.filter(r=>r.ownerUid===(uid||state.uid) && fechaLimite(r)<hoy);
   return [...new Map(propias.map(r=>[`${r.fecha}__${r.vehiculo}`, r])).values()]
     .sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
@@ -1673,7 +1706,7 @@ async function guardarReserva(){
         nombre:state.nombre, ownerUid:state.uid, creado:Date.now(),
         combSalida:combS, kmSalida:null, comentarioSalida:obsS, libreta:lib,
         extension:ext, motivoExtension:motExt,
-        demoraHora:"", demoraMotivo:"", demoraTs:null,
+        demoraHora:"", demoraFecha:"", demoraMotivo:"", demoraTs:null,
         devuelto:false, devueltoTs:null, devueltoPor:null,
         combLlegada:"", kmLlegada:null, comentarioLlegada:"", requiereService:false,
         gastoNafta:0, gastoPeaje:0, sinPeaje:false, gastoEstac:0, sinEstac:false, gastoImprev:0, detalleImprev:"" };
@@ -1750,29 +1783,69 @@ function abrirDemora(id){
       ? `<div class="aviso-box">Lo espera <b>${esc(sig.nombre)}</b> el ${fechaLarga(sig.fecha)} a las ${inicioDe(sig)}.${tel?"":`<br>⚠️ ${esc(primerNombre(sig.nombre))} todavía no cargó su celular: vas a poder copiar el mensaje y mandárselo por donde prefieras.`}</div>`
       : `<div class="aviso-box">Nadie tiene el auto reservado a continuación, pero dejar el aviso ayuda a que se sepa dónde está.</div>`}
     <div class="fgrid">
-      <div class="frow"><label class="fld">Nueva hora estimada *</label><input id="xHora" type="time" value="${esc(r.demoraHora||"")}" /></div>
-      <div class="frow"><label class="fld">Motivo *</label><select id="xMot">${CONFIG.motivosDemora.map(m=>`<option${m===r.demoraMotivo?" selected":""}>${m}</option>`).join("")}</select></div>
+      <div class="frow"><label class="fld">¿Qué día lo devolvés? *</label>
+        <input id="xFecha" type="date" min="${esc(r.fecha)}" value="${esc(r.demoraFecha||r.fecha)}" />
+        <div class="hint">Si volvés otro día, ponelo acá: la app te reserva los días de por medio.</div></div>
+      <div class="frow"><label class="fld">¿A qué hora? *</label><input id="xHora" type="time" value="${esc(r.demoraHora||r.horaDevolucion||"")}" /></div>
     </div>
+    <div class="frow"><label class="fld">Motivo *</label>
+      <select id="xMot">${CONFIG.motivosDemora.map(m=>`<option${m===r.demoraMotivo?" selected":""}>${m}</option>`).join("")}</select></div>
     <div class="pinmsg" id="xMsg"></div>
     <div class="pinactions">
       <button class="btn ghost" data-close>Cancelar</button>
       <button id="xOk" class="btn">Avisar</button>
     </div>`, ()=>{ $("xOk").addEventListener("click", ()=>guardarDemora(r, sig, tel)); });
 }
+function diasEntre(desde, hasta){
+  const out=[]; const d=new Date(`${desde}T12:00:00`), f=new Date(`${hasta}T12:00:00`);
+  d.setDate(d.getDate()+1);
+  while(d<=f){ out.push(ymd(d)); d.setDate(d.getDate()+1); }
+  return out;
+}
 async function guardarDemora(r, sig, tel){
   if(!esMia(r)){ cerrarModal(); toast("Solo quien tiene el auto puede avisar la demora."); return; }
-  const nueva=$("xHora").value||"", mot=$("xMot").value||"";
-  if(!nueva){ $("xMsg").textContent="Poné la nueva hora estimada."; return; }
-  const patch={ demoraHora:nueva, demoraMotivo:mot, demoraTs:ahoraMs() };
+  const nueva=$("xHora").value||"", mot=$("xMot").value||"", hasta=$("xFecha").value||r.fecha;
+  if(!nueva){ $("xMsg").textContent="Poné la hora en que lo devolvés."; return; }
+  if(hasta<r.fecha){ $("xMsg").textContent="El día no puede ser anterior al de la reserva."; return; }
+
+  /* Si vuelve otro día, se reservan los días de por medio para que nadie cuente con el auto */
+  const extra=diasEntre(r.fecha, hasta), tomados=[], choques=[];
+  for(const dia of extra){
+    for(const b of CONFIG.bloques){
+      const ocupa=tomadoEn(dia, r.vehiculo, b.id);
+      if(ocupa && ocupa.ownerUid!==state.uid){ choques.push(ocupa); continue; }
+      if(ocupa) continue;                                   // ya es mío
+      const base=`${dia}__${r.vehiculo}__${b.id}`;
+      let id=base, n=1;
+      while(state.agenda.some(x=>x.id===id)){ n++; id=`${base}__${n}`; }
+      try{
+        await Store.reservar(id, Object.assign({}, r, { id, fecha:dia, bloque:b.id,
+          creado:Date.now(), horaDevolucion:nueva,
+          demoraHora:"", demoraFecha:"", demoraMotivo:"", demoraTs:null,
+          extension:true, motivoExtension:mot,
+          devuelto:false, devueltoTs:null, devueltoPor:null,
+          combLlegada:"", kmLlegada:null, comentarioLlegada:"", requiereService:false,
+          gastoNafta:0, gastoPeaje:0, sinPeaje:false, gastoEstac:0, sinEstac:false, gastoImprev:0, detalleImprev:"" }));
+        tomados.push(dia);
+      }catch(e){ console.error(e); }
+    }
+  }
+  const patch={ demoraHora:nueva, demoraFecha:hasta, demoraMotivo:mot, demoraTs:ahoraMs() };
   for(const ex of hermanas(r, true)){
     try{ await Store.actualizar(ex.id, patch); }catch(e){ console.error(e); }
   }
   cerrarModal();
-  if(!sig){ toast("Demora registrada. El auto queda marcado como “vuelve más tarde”."); return; }
-  const msg=mensajeDemora(r, nueva, mot, sig);
+  const chocaron=[...new Map(choques.map(x=>[x.ownerUid+x.fecha, x])).values()];
+  if(chocaron.length){ mostrarChoques(r, hasta, nueva, mot, chocaron); return; }
+  if(!sig){ toast(hasta>r.fecha
+    ? `Registrado: devolvés el ${fechaLarga(hasta)}. El auto queda tomado hasta ese día.`
+    : "Demora registrada. El auto queda marcado como “vuelve más tarde”."); return; }
+  const msg=mensajeDemora(r, nueva, mot, sig, hasta);
   abrirModal(`
     <div class="pintitle">Aviso listo</div>
-    <p class="pinsub">La demora ya quedó registrada y visible para todos. Ahora avisale a ${esc(primerNombre(sig.nombre))}.</p>
+    <p class="pinsub">${hasta>r.fecha
+      ? `Quedó registrado que devolvés el <b>${fechaLarga(hasta)}</b>${tomados.length?` y te reservamos los días de por medio`:""}.`
+      : "La demora ya quedó registrada y visible para todos."} Ahora avisale a ${esc(primerNombre(sig.nombre))}.</p>
     <div class="frow"><label class="fld">Mensaje</label><textarea id="wMsg" style="min-height:110px">${esc(msg)}</textarea></div>
     <div class="pinactions">
       <button class="btn ghost" data-copiar>📋 Copiar</button>
@@ -1926,7 +1999,8 @@ function verDetalle(id){
     <div class="rowlist">
       <div class="row"><div class="row-main"><div class="row-nm">Centro de costo</div><div class="row-meta">${esc(r.cc||"—")}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Horarios</div><div class="row-meta">
-        Comprometido: ${esc(r.horaDevolucion||"—")}${r.demoraHora?` · Demora avisada: ${esc(r.demoraHora)} (${esc(r.demoraMotivo||"")})`:""}<br>
+        Comprometido: ${fechaLarga(r.fecha)} ${esc(r.horaDevolucion||"—")}${
+          r.demoraHora?`<br>Demora avisada: ${demoraDeDias(r)?fechaLarga(r.demoraFecha)+" ":""}${esc(r.demoraHora)} (${esc(r.demoraMotivo||"")})`:""}<br>
         Devuelto: ${r.devueltoTs?esc(sellaFechaHora(r.devueltoTs)):"—"}${r.devueltoTs?(tarde?" · fuera de hora":" · en hora"):""}${
         r.devueltoPor?`<br>Registró: ${esc(r.devueltoPor)}`:""}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Gastos</div><div class="row-meta">Nafta: retiró ${esc(r.combSalida||"—")} → devolvió ${esc(r.combLlegada||"—")}${r.gastoNafta?` · cargó ${moneda(r.gastoNafta)}`:""}<br>Peajes: ${r.sinPeaje?"sin peajes (ciudad)":(r.gastoPeaje?moneda(r.gastoPeaje):"—")}</div></div></div>
@@ -1994,7 +2068,7 @@ async function exportarExcel(){
 
   /* ── Hoja 1: usos del mes ── */
   const cab=["Fecha","Vehículo","Matrícula","Persona","Libreta al día","Turno","Centro de costo",
-    "Hora comprometida","Demora avisada","Devuelto","En hora","Km al devolver",
+    "Hora comprometida","Vuelve el (demora)","Demora avisada","Devuelto","En hora","Km al devolver",
     "Nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto"];
   if(admin) cab.push("Alquiler imputado","Costo total del uso");
   cab.push("Requiere service","Obs. al retirar","Obs. al devolver");
@@ -2006,7 +2080,8 @@ async function exportarExcel(){
     const gastos=(u.gastoNafta||0)+(u.gastoPeaje||0)+(u.gastoEstac||0)+(u.gastoImprev||0);
     const f=[ fechaExcel(u.fecha), v?v.nombre:u.vehiculo, v?v.matricula:"", u.nombre,
       u.libreta || (state.libretas[u.ownerUid]||""),
-      etiquetaBloques(u.bloques), u.cc||"", u.horaDevolucion||"", u.demoraHora||"",
+      etiquetaBloques(u.bloques), u.cc||"", u.horaDevolucion||"",
+      demoraDeDias(u)? fechaExcel(u.demoraFecha) : "", u.demoraHora||"",
       u.devueltoTs? sellaFechaHora(u.devueltoTs) : "sin registrar",
       u.devueltoTs ? (u.devueltoTs<=lim+5*60000?"Sí":"No") : "",
       u.kmLlegada||"",
@@ -2015,7 +2090,7 @@ async function exportarExcel(){
     f.push(u.requiereService?"Sí":"No", u.comentarioSalida||"", u.comentarioLlegada||"");
     filas.push(f);
   });
-  const anchos=[12,20,11,24,24,13,15,12,12,17,8,14,10,10,14,12,26];
+  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,10,14,12,26];
   if(admin) anchos.push(15,16);
   anchos.push(14,34,34);
   const ws1=hojaConAnchos(X, filas, anchos, [0]);
