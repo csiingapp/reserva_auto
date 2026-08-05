@@ -268,6 +268,7 @@
       </div>
       <div class="hint" id="hint">Tocá un vehículo libre para elegirlo; después confirmás abajo.</div>
       <div id="deudaBox"></div>
+      <div id="externoBox"></div>
       <div id="autos" class="autos"></div>
       <div class="legend">
         <span><i class="chip libre"></i> Libre</span>
@@ -322,7 +323,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.3</b> · demora de varios días
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.5</b> · pedido de alquiler cuando no hay autos
   </footer>
 </div>
 
@@ -467,6 +468,11 @@ const CONFIG = {
     estacionamientoMensual: 14510,
   },
   /* Cargos que solo puede registrar un administrador */
+  /* 🚙 CUANDO NO QUEDA NINGÚN AUTO LIBRE
+     A quién le llega el pedido de alquiler. La gestión con la rentadora la hace esa persona. */
+  externo: {
+    destinatario: "DLopezS@ciemsi.com",
+  },
   /* Cuando alguien suma días a un auto que ya tiene sin devolver */
   motivosExtension: [
     "El trabajo en campo se extendió",
@@ -1009,6 +1015,91 @@ function renderDeuda(){
     <div class="btnrow">${d.map(r=>`<button class="btn ok tiny" data-dev="${esc(r.id)}">Registrar la del ${fechaCorta(r.fecha)}</button>`).join("")}</div>
   </div>`;
 }
+const libresAhora=()=> VEHICULOS.filter(v=>{
+  const o=ocupacion(v.id); return !o.ajeno && !o.mio && !deudaVehiculo(v.id).length;
+}).length;
+function renderExterno(){
+  const box=$("externoBox"); if(!box) return;
+  if(libresAhora()>0){ box.innerHTML=""; return; }
+  const E=CONFIG.externo||{};
+  box.innerHTML=`<div class="alerta amarilla" style="margin-top:14px">
+    <h3>No queda ningún vehículo libre</h3>
+    <p>Los ${VEHICULOS.length} autos están tomados para ${etiquetaTurno().toLowerCase()} del ${fechaLarga(state.fecha)}.
+      Si el trabajo no puede esperar, pedí un vehículo de alquiler siguiendo estos dos pasos:</p>
+    <div class="rowlist">
+      <div class="row"><div class="row-main">
+        <div class="row-nm">1 · Solicitá el vehículo por Nodum</div>
+        <div class="row-meta">Dejá registrado el pedido en el sistema, como cualquier compra.</div></div>
+      </div>
+      <div class="row"><div class="row-main">
+        <div class="row-nm">2 · Mandá el pedido por mail</div>
+        <div class="row-meta">Le llega a ${esc(E.destinatario||"—")} con los datos ya cargados.</div></div>
+        <div class="row-acts"><button class="btn tiny" data-pedirext>Preparar el mail</button></div>
+      </div>
+    </div>
+  </div>`;
+}
+function abrirPedidoExterno(){
+  const E=CONFIG.externo||{};
+  abrirModal(`
+    <div class="pintitle">🚙 Pedir un vehículo de alquiler</div>
+    <p class="pinsub">Completá los datos y la app arma el mail para <b>${esc(E.destinatario||"—")}</b>.
+      Acordate de dejar el pedido en Nodum también.</p>
+    <div class="fgrid">
+      <div class="frow"><label class="fld">Desde *</label><input id="eDesde" type="date" value="${esc(state.fecha)}" /></div>
+      <div class="frow"><label class="fld">Hasta *</label><input id="eHasta" type="date" value="${esc(state.fecha)}" /></div>
+    </div>
+    <div class="frow"><label class="fld">¿Cuántas personas viajan?</label>
+      <input id="ePers" type="number" min="1" value="1" style="max-width:160px" /></div>
+    <div class="frow"><label class="fld">¿Qué vehículo necesitás y para qué? *</label>
+      <textarea id="eDet" placeholder="Ej: camioneta 4x4 para relevamiento en Ruta 8 km 32, se entra por camino de tierra con equipo de topografía."></textarea></div>
+
+    <div class="pinmsg" id="eMsg"></div>
+    <div class="pinactions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button id="eOk" class="btn">Preparar el mail</button>
+    </div>`, ()=>{ $("eOk").addEventListener("click", armarMailExterno); });
+}
+function armarMailExterno(){
+  const E=CONFIG.externo||{};
+  const desde=$("eDesde").value||"", hasta=$("eHasta").value||desde;
+  const pers=parseInt($("ePers").value||"1",10)||1;
+  const det=($("eDet").value||"").trim();
+  if(!desde){ $("eMsg").textContent="Poné desde qué día lo necesitás."; return; }
+  if(hasta<desde){ $("eMsg").textContent="La fecha de fin no puede ser anterior al inicio."; return; }
+  if(!det){ $("eMsg").textContent="Contá qué vehículo necesitás: sin eso no pueden cotizar."; return; }
+
+  const rango = (hasta && hasta!==desde) ? `del ${fechaLarga(desde)} al ${fechaLarga(hasta)}` : `el ${fechaLarga(desde)}`;
+  const asunto=`Solicitud de alquiler de vehículo · CSI · ${fechaCorta(desde)}`;
+  const cuerpo=[
+    `Hola,`,``,
+    `Necesito un vehículo de alquiler: los dos autos de la empresa están tomados en esas fechas.`,``,
+    `Fechas: ${rango}`,
+    `Personas que viajan: ${pers}`,
+    `Vehículo requerido: ${det}`,``,
+    `Ya dejé el pedido cargado en Nodum.`,``,
+    `Gracias,`,
+    `${state.nombre}`,
+    `CSI Ingenieros`,
+  ].join("\n");
+  const link=`mailto:${encodeURIComponent(E.destinatario||"")}`
+    + `?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+
+  cerrarModal();
+  abrirModal(`
+    <div class="pintitle">Mail listo</div>
+    <p class="pinsub">Para: <b>${esc(E.destinatario||"—")}</b></p>
+    <div class="frow"><label class="fld">Asunto</label><input id="eAsunto" type="text" value="${esc(asunto)}" /></div>
+    <div class="frow"><label class="fld">Mensaje</label><textarea id="eCuerpo" style="min-height:190px">${esc(cuerpo)}</textarea></div>
+    <div class="btnrow">
+      <a class="btn" href="${link}" style="text-decoration:none; display:inline-block">✉️ Abrir en el correo</a>
+      <button class="btn ghost" data-copiarmail>📋 Copiar el texto</button>
+    </div>
+    <div class="hint" style="margin-top:10px">Si editás el texto acá, copialo antes de abrir el correo: el botón usa la versión original.</div>
+    <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`, (w)=>{
+      w.querySelector("[data-copiarmail]").addEventListener("click",()=>copiar($("eCuerpo").value));
+  });
+}
 function renderAutos(){
   renderDeuda();
   let ocupados=0;
@@ -1048,6 +1139,7 @@ function renderAutos(){
   }).join("");
   $("autos").innerHTML=html;
   $("occ").innerHTML=`<b>${VEHICULOS.length-ocupados}</b> de ${VEHICULOS.length} libres · ${etiquetaTurno()}`;
+  renderExterno();
 }
 function renderDia(){
   const rs=Object.values(state.reservas);
@@ -1468,7 +1560,7 @@ async function borrarCargo(id){
   if(!confirm(`¿Borrar el cargo de ${moneda(g.monto)} (${g.tipo})?`)) return;
   try{ await Store.borrarCargo(id); toast("Cargo borrado."); }catch(e){ console.error(e); toast("No se pudo borrar."); }
 }
-function renderAll(){ renderStrip(); renderTurnos(); derivarDia(); renderAutos(); renderDia(); renderMisReservas(); renderPendientes(); renderAvisoMio(); renderConfirm(); }
+function renderAll(){ renderStrip(); renderTurnos(); derivarDia(); renderAutos(); renderExterno(); renderDia(); renderMisReservas(); renderPendientes(); renderAvisoMio(); renderConfirm(); }
 
 /* ════════ MODAL GENÉRICO ════════ */
 const cerrarModal=()=>{ const w=$("modalWrap"); w.hidden=true; w.innerHTML=""; };
@@ -2227,6 +2319,7 @@ document.body.addEventListener("click", e=>{
   const c=e.target.closest("[data-cal]");    if(c){ menuCalendario(c.dataset.cal); return; }
   const q=e.target.closest("[data-del]");    if(q){ cancelarReserva(q.dataset.del); return; }
   const v=e.target.closest("[data-ver]");    if(v){ verDetalle(v.dataset.ver); return; }
+  const pe=e.target.closest("[data-pedirext]"); if(pe){ abrirPedidoExterno(); return; }
   const nk=e.target.closest("[data-nuevocargo]"); if(nk){ abrirCargo(); return; }
   const bk=e.target.closest("[data-borrarcargo]"); if(bk){ borrarCargo(bk.dataset.borrarcargo); return; }
 });
