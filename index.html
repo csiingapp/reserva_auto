@@ -3,7 +3,7 @@
   ============================================================================
   RESERVA DE VEHÍCULOS · CSI  (ingreso por lista de nombres + PIN)
   ============================================================================
-  · Misma base que la app de asientos: cada persona ENTRA ELIGIENDO SU NOMBRE.
+  · Cada persona ENTRA ELIGIENDO SU NOMBRE de una lista, con un PIN de 4 dígitos.
   · Proyecto propio en Firebase ("reserva-auto"): cada persona crea su PIN acá.
   · Colecciones nuevas en Firestore: flota_reservas, flota_cc.
   · Reglas de Firestore: agregá flota_reservas y flota_cc con acceso por sesión.
@@ -323,7 +323,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.6</b> · 93 personas
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.7</b> · 93 personas
   </footer>
 </div>
 
@@ -877,7 +877,7 @@ function mostrarPin(persona, u){
   w.innerHTML=`<div class="pincard">
       <div class="pintitle">Hola, ${esc(primerNombre)}</div>
       <p class="pinsub">${nuevo
-        ? "Creá tu PIN de 4 dígitos para esta app. Podés usar el mismo de la app de asientos, así te acordás de uno solo."
+        ? "Creá tu PIN de 4 dígitos. Elegí uno que puedas recordar: te lo va a pedir desde cualquier otro dispositivo."
         : "Ingresá tu PIN de 4 dígitos."}</p>
       <input id="pin1" class="pininput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" />
       ${nuevo ? `<input id="pin2" class="pininput" type="password" inputmode="numeric" maxlength="4" placeholder="Repetí el PIN" autocomplete="off" />` : ``}
