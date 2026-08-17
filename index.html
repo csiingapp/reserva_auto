@@ -323,7 +323,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.7</b> · 93 personas
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.9</b> · telepeaje
   </footer>
 </div>
 
@@ -511,6 +511,8 @@ const CONFIG = {
        Es distinto del estacionamiento suelto que carga cada persona al devolver.     */
     estacionamientoMensual: 14510,
   },
+  /* Cómo se pagó la carga de combustible */
+  formasPagoNafta: ["Sisconve", "Efectivo", "Tarjeta de la empresa", "Otro"],
   /* Cargos que solo puede registrar un administrador */
   /* 🚙 CUANDO NO QUEDA NINGÚN AUTO LIBRE
      A quién le llega el pedido de alquiler. La gestión con la rentadora la hace esa persona. */
@@ -1201,7 +1203,8 @@ function renderDia(){
     if(dev){
       tags.push(`<span class="tag ok">✓ devuelto el ${r.devueltoTs?esc(sellaFechaHora(r.devueltoTs)):"—"}</span>`);
       const gasto=g.reduce((s,x)=>s+(x.gastoNafta||0),0);
-      if(gasto) tags.push(`<span class="tag nafta">⛽ ${moneda(gasto)}</span>`);
+      const pg=g.find(x=>x.pagoNafta);
+      if(gasto) tags.push(`<span class="tag nafta">⛽ ${moneda(gasto)}${pg?` · ${esc(pg.pagoNafta)}`:""}</span>`);
       const pj=g.reduce((s,x)=>s+(x.gastoPeaje||0),0);
       if(pj) tags.push(`<span class="tag nafta">🛣 ${moneda(pj)}</span>`);
       if(g.some(x=>x.requiereService)) tags.push(`<span class="tag serv">🔧 requiere service</span>`);
@@ -1332,6 +1335,13 @@ function renderStats(){
     </div>
     <div class="cols">
       ${porX("nombre", admin?"Por persona":"Tus usos")}
+      ${admin?`<div class="pcol"><h4>⛽ Nafta según forma de pago</h4>${(()=>{
+        const m={}; usos.forEach(u=>{ if(!u.gastoNafta) return;
+          const k=u.pagoNafta||"Sin indicar"; m[k]=(m[k]||0)+u.gastoNafta; });
+        const e=Object.entries(m).sort((a,b)=>b[1]-a[1]);
+        return e.length ? `<ul>${e.map(([k,v])=>`<li><span>${esc(k)}</span><b>${moneda(v)}</b></li>`).join("")}</ul>`
+                        : `<div class="empty">Sin cargas de nafta este mes.</div>`;
+      })()}</div>`:""}
       <div class="pcol"><h4>🔧 Reportes de service</h4>${
         services.length
           ? `<ul>${services.map(u=>`<li><span>${esc(veh(u.vehiculo)?veh(u.vehiculo).nombre:u.vehiculo)} · ${fechaCorta(u.fecha)}<br><span style="color:var(--muted);font-size:.8rem">${esc(u.comentarioLlegada||"sin detalle")}</span></span></li>`).join("")}</ul>`
@@ -1458,7 +1468,8 @@ function agruparUsos(datos){
     else { ex.bloques.push(r.bloque); ex.gastoNafta+=(r.gastoNafta||0); ex.gastoPeaje+=(r.gastoPeaje||0);
       ex.gastoEstac+=(r.gastoEstac||0); ex.gastoImprev+=(r.gastoImprev||0);
       ex.devuelto = ex.devuelto && r.devuelto; ex.requiereService = ex.requiereService||r.requiereService;
-      if(!ex.detalleImprev && r.detalleImprev) ex.detalleImprev=r.detalleImprev; }
+      if(!ex.detalleImprev && r.detalleImprev) ex.detalleImprev=r.detalleImprev;
+      if(!ex.pagoNafta && r.pagoNafta) ex.pagoNafta=r.pagoNafta; }
   });
   return [...m.values()].sort((a,b)=> a.fecha<b.fecha?-1 : a.fecha>b.fecha?1 : a.vehiculo.localeCompare(b.vehiculo));
 }
@@ -1845,7 +1856,7 @@ async function guardarReserva(){
         demoraHora:"", demoraFecha:"", demoraMotivo:"", demoraTs:null,
         devuelto:false, devueltoTs:null, devueltoPor:null,
         combLlegada:"", kmLlegada:null, comentarioLlegada:"", requiereService:false,
-        gastoNafta:0, gastoPeaje:0, sinPeaje:false, gastoEstac:0, sinEstac:false, gastoImprev:0, detalleImprev:"" };
+        gastoNafta:0, pagoNafta:"", gastoPeaje:0, sinPeaje:false, gastoEstac:0, sinEstac:false, gastoImprev:0, detalleImprev:"" };
       try{ await Store.reservar(id,data); creados.push(id); if(!primera) primera=data; }
       catch(e){ fallo=true; break; }
     }
@@ -2017,7 +2028,11 @@ function abrirDevolucion(id){
           : `<div class="hint">Copiá el número tal cual figura en el tablero del auto.</div>`}</div>
     </div>
     <div class="fgrid">
-      <div class="frow"><label class="fld">Gasto en nafta (${esc(CONFIG.costos.moneda)})</label><input id="dGasto" type="number" inputmode="numeric" min="0" placeholder="0 si no cargaste" value="${r.gastoNafta||""}" /></div>
+      <div class="frow"><label class="fld">Gasto en nafta (${esc(CONFIG.costos.moneda)})</label>
+        <input id="dGasto" type="number" inputmode="numeric" min="0" placeholder="0 si no cargaste" value="${r.gastoNafta||""}" /></div>
+      <div class="frow" id="dPagoBox" style="${r.gastoNafta?"":"display:none"}">
+        <label class="fld">¿Cómo la pagaste? *</label>
+        <select id="dPago"><option value="">Elegí…</option>${CONFIG.formasPagoNafta.map(f=>`<option${f===r.pagoNafta?" selected":""}>${f}</option>`).join("")}</select></div>
       <div class="frow"><label class="fld">¿Pagaste estacionamiento? *</label>
         <select id="dHayEstac">
           <option value=""${(r.sinEstac||r.gastoEstac)?"":" selected"}>Elegí…</option>
@@ -2036,7 +2051,7 @@ function abrirDevolucion(id){
         <select id="dHayPeaje">
           <option value=""${(r.sinPeaje||r.gastoPeaje)?"":" selected"}>Elegí…</option>
           <option value="no"${r.sinPeaje?" selected":""}>No, no salí de la ciudad</option>
-          <option value="si"${r.gastoPeaje?" selected":""}>Sí, pagué peajes</option>
+          <option value="si"${r.gastoPeaje?" selected":""}>Telepeaje</option>
         </select></div>
       <div class="frow" id="dPeajeBox" style="${r.gastoPeaje?"":"display:none"}">
         <label class="fld">Total de peajes (${esc(CONFIG.costos.moneda)})</label>
@@ -2064,6 +2079,10 @@ function abrirDevolucion(id){
         $("dPeajeBox").style.display = si ? "" : "none";
         if(!si) $("dPeaje").value=""; else $("dPeaje").focus();
       });
+      const verPago=()=>{ const hay=(parseInt($("dGasto").value||"0",10)||0)>0;
+        $("dPagoBox").style.display = hay ? "" : "none";
+        if(!hay) $("dPago").value=""; };
+      $("dGasto").addEventListener("input", verPago);
       $("dHayEstac").addEventListener("change", (ev)=>{
         const si=ev.target.value==="si";
         $("dEstacBox").style.display = si ? "" : "none";
@@ -2076,6 +2095,7 @@ async function guardarDevolucion(r){
   if(!puedeGestionar(r)){ cerrarModal(); toast("No podés registrar la devolución de otra persona."); return; }
   const comb=$("dComb").value||"", km=parseInt($("dKm").value||"",10);
   const gasto=parseInt($("dGasto").value||"0",10)||0, serv=$("dServ").value==="si", obs=($("dObs").value||"").trim();
+  const pago=$("dPago")?($("dPago").value||""):"";
   const hayPeaje=$("dHayPeaje").value||"", peaje=parseInt($("dPeaje").value||"0",10)||0;
   const hayEstac=$("dHayEstac").value||"", estac=parseInt($("dEstac").value||"0",10)||0;
   const imprev=parseInt($("dImprev").value||"0",10)||0, imprevDet=($("dImprevDet").value||"").trim();
@@ -2096,6 +2116,7 @@ async function guardarDevolucion(r){
       + `¿Es correcto?`)) return;
   if(serv && !obs){ $("dMsg").textContent="Contá brevemente qué le pasa al auto."; return; }
   if(!hayPeaje){ $("dMsg").textContent="Decinos si hubo peajes o no: hace falta para el costo del proyecto."; return; }
+  if(gasto>0 && !pago){ $("dMsg").textContent="Indicá cómo pagaste la nafta (Sisconve, efectivo…)."; return; }
   if(hayPeaje==="si" && peaje<=0){ $("dMsg").textContent="Poné cuánto pagaste de peajes."; return; }
   if(!hayEstac){ $("dMsg").textContent="Decinos si pagaste estacionamiento o no."; return; }
   if(hayEstac==="si" && estac<=0){ $("dMsg").textContent="Poné cuánto pagaste de estacionamiento."; return; }
@@ -2103,7 +2124,7 @@ async function guardarDevolucion(r){
   const ts=ahoraMs();
   const base={ devuelto:true, devueltoTs:ts, devueltoPor:state.nombre,
     combLlegada:comb, kmLlegada:km, comentarioLlegada:obs, requiereService:serv,
-    sinPeaje: hayPeaje==="no", sinEstac: hayEstac==="no", detalleImprev:imprevDet };
+    sinPeaje: hayPeaje==="no", sinEstac: hayEstac==="no", detalleImprev:imprevDet, pagoNafta: gasto>0?pago:"" };
   let n=0;
   for(const ex of hermanas(r, true)){          // todos los turnos de esa salida, sin devolver
     // el gasto se guarda una sola vez para no duplicar totales
@@ -2139,7 +2160,8 @@ function verDetalle(id){
           r.demoraHora?`<br>Demora avisada: ${demoraDeDias(r)?fechaLarga(r.demoraFecha)+" ":""}${esc(r.demoraHora)} (${esc(r.demoraMotivo||"")})`:""}<br>
         Devuelto: ${r.devueltoTs?esc(sellaFechaHora(r.devueltoTs)):"—"}${r.devueltoTs?(tarde?" · fuera de hora":" · en hora"):""}${
         r.devueltoPor?`<br>Registró: ${esc(r.devueltoPor)}`:""}</div></div></div>
-      <div class="row"><div class="row-main"><div class="row-nm">Gastos</div><div class="row-meta">Nafta: retiró ${esc(r.combSalida||"—")} → devolvió ${esc(r.combLlegada||"—")}${r.gastoNafta?` · cargó ${moneda(r.gastoNafta)}`:""}<br>Peajes: ${r.sinPeaje?"sin peajes (ciudad)":(r.gastoPeaje?moneda(r.gastoPeaje):"—")}</div></div></div>
+      <div class="row"><div class="row-main"><div class="row-nm">Gastos</div><div class="row-meta">Nafta: retiró ${esc(r.combSalida||"—")} → devolvió ${esc(r.combLlegada||"—")}${
+  r.gastoNafta?` · cargó ${moneda(r.gastoNafta)}${r.pagoNafta?` (${esc(r.pagoNafta)})`:""}`:""}<br>Peajes: ${r.sinPeaje?"sin peajes (ciudad)":(r.gastoPeaje?moneda(r.gastoPeaje):"—")}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Odómetro</div><div class="row-meta">${r.kmSalida||"—"} → ${r.kmLlegada||"—"}${(r.kmSalida&&r.kmLlegada)?` (${r.kmLlegada-r.kmSalida} km)`:""}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Observaciones</div><div class="row-meta">Salida: ${esc(r.comentarioSalida||"—")}<br>Devolución: ${esc(r.comentarioLlegada||"—")}</div></div></div>
       ${r.requiereService?`<div class="row late"><div class="row-main"><div class="row-nm">🔧 Requiere service</div><div class="row-meta">${esc(r.comentarioLlegada||"")}</div></div></div>`:""}
@@ -2205,7 +2227,7 @@ async function exportarExcel(){
   /* ── Hoja 1: usos del mes ── */
   const cab=["Fecha","Vehículo","Matrícula","Persona","Libreta al día","Turno","Centro de costo",
     "Hora comprometida","Vuelve el (demora)","Demora avisada","Devuelto","En hora","Km al devolver",
-    "Nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto"];
+    "Nafta","Pago nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto"];
   if(admin) cab.push("Alquiler imputado","Costo total del uso");
   cab.push("Requiere service","Obs. al retirar","Obs. al devolver");
   const filas=[cab];
@@ -2221,12 +2243,12 @@ async function exportarExcel(){
       u.devueltoTs? sellaFechaHora(u.devueltoTs) : "sin registrar",
       u.devueltoTs ? (u.devueltoTs<=lim+5*60000?"Sí":"No") : "",
       u.kmLlegada||"",
-      u.gastoNafta||0, u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"" ];
+      u.gastoNafta||0, u.pagoNafta||"", u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"" ];
     if(admin) f.push(Math.round(alq), Math.round(alq+gastos));
     f.push(u.requiereService?"Sí":"No", u.comentarioSalida||"", u.comentarioLlegada||"");
     filas.push(f);
   });
-  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,10,14,12,26];
+  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,16,10,14,12,26];
   if(admin) anchos.push(15,16);
   anchos.push(14,34,34);
   const ws1=hojaConAnchos(X, filas, anchos, [0]);
