@@ -323,7 +323,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v6.9</b> · telepeaje
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.0</b> · limpieza de datos de prueba
   </footer>
 </div>
 
@@ -718,6 +718,10 @@ const LocalStore = {
     this.autos[id]=Object.assign({id}, this.autos[id]||{}, patch); this._p(); this._emit(); },
   async crearCargo(d){ this.cargos[d.id]=d; this._p(); this._emit(); },
   async borrarCargo(id){ delete this.cargos[id]; this._p(); this._emit(); },
+  async borrarDefinitivo(col,id){
+    const m={ flota_reservas:this.res, flota_canceladas:this.can, flota_cargos:this.cargos, flota_cc:this.cc };
+    if(m[col]) delete m[col][id];
+    this._p(); this._emit(); },
   onCC(cb){ this._cbCC=cb; this._emit(); },
   async reservar(id,data){ const ex=this.res[id];
     if(ex && ex.ownerUid!==data.ownerUid) throw new Error("OCUPADO");
@@ -772,6 +776,7 @@ function makeFirebaseStore(fs, db){
         const l=[]; snap.forEach(d=>l.push(Object.assign({id:d.id}, d.data()))); cb(l); }, onErr); },
     async actualizarVehiculo(id,patch){ await setDoc(doc(db,"flota_vehiculos",id),patch,{merge:true}); },
     async borrarCargo(id){ await deleteDoc(doc(db,"flota_cargos",id)); },
+    async borrarDefinitivo(col,id){ await deleteDoc(doc(db,col,id)); },
     async anular(id,meta){
       const snap=await getDoc(doc(db,"flota_reservas",id)); if(!snap.exists()) return;
       const nid=`${id}__${meta.canceladaTs}`;
@@ -1524,7 +1529,8 @@ const listaVehs=(m)=> Object.entries(m||{}).sort((a,b)=>b[1]-a[1])
   .map(([id,n])=>`${cortoVeh(id)}${n>1?` <span style="opacity:.6">×${n}</span>`:""}`).join(" · ") || "—";
 function tablaCostos(C){
   const {filas,total,sinAsignar,vehs,diasMes}=C;
-  const botonCargo=`<div class="btnrow"><button class="btn ghost tiny" data-nuevocargo>➕ Registrar multa o siniestro</button></div>`;
+  const botonCargo=`<div class="btnrow"><button class="btn ghost tiny" data-nuevocargo>➕ Registrar multa o siniestro</button>
+    <button class="btn ghost tiny" data-limpiarcc>🧹 Borrar todo lo de un centro de costo</button></div>`;
   const listaCargos = state.cargos.length
     ? `<div class="rowlist">${state.cargos.map(g=>{ const v=veh(g.vehiculo);
         return `<div class="row"><div class="row-main">
@@ -1564,6 +1570,78 @@ function tablaCostos(C){
     </table></div>
     ${botonCargo}${listaCargos}
   </div>`;
+}
+/* Borra TODO lo asociado a un centro de costo: reservas, cancelaciones y cargos.
+   Pensado para limpiar datos de prueba sin tocar la consola de Firebase.        */
+function loQueHayDelCC(cc){
+  const c=(cc||"").trim().toUpperCase();
+  const uniq=(l)=>[...new Map(l.map(x=>[x.id,x])).values()];
+  return {
+    cc:c,
+    reservas: uniq([...state.agenda, ...state.pendientes, ...state.mes].filter(r=>(r.cc||"").toUpperCase()===c)),
+    canceladas: uniq(state.canceladas.filter(r=>(r.cc||"").toUpperCase()===c)),
+    cargos: uniq(state.cargos.filter(r=>(r.cc||"").toUpperCase()===c)),
+    enCatalogo: state.ccs.some(x=>(x.codigo||"").toUpperCase()===c),
+  };
+}
+function abrirLimpiarCC(){
+  if(!soyAdmin()){ toast("Solo un administrador puede hacer esto."); return; }
+  abrirModal(`
+    <div class="pintitle">🧹 Borrar todo lo de un centro de costo</div>
+    <p class="pinsub">Sirve para eliminar datos de prueba. Borra <b>de forma definitiva</b> las reservas,
+      cancelaciones y cargos de ese CC. No se puede deshacer.</p>
+    <div class="aviso-box">Antes de borrar, descargá el Excel del mes: es tu única copia de respaldo.</div>
+    <div class="frow"><label class="fld">Centro de costo *</label>
+      <input id="lcCC" type="text" list="ccList" placeholder="Ej: PRUEBA 1" autocomplete="off" />${ccOptions()}</div>
+    <div id="lcPrev"></div>
+    <div class="pinmsg" id="lcMsg"></div>
+    <div class="pinactions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button id="lcVer" class="btn">Ver qué se va a borrar</button>
+    </div>`, (w)=>{
+      $("lcCC").focus();
+      $("lcVer").addEventListener("click", ()=>{
+        const cc=($("lcCC").value||"").trim().toUpperCase();
+        if(!cc){ $("lcMsg").textContent="Escribí el centro de costo."; return; }
+        const d=loQueHayDelCC(cc);
+        const total=d.reservas.length+d.canceladas.length+d.cargos.length;
+        if(!total && !d.enCatalogo){ $("lcMsg").textContent=`No hay nada registrado con el CC ${cc}.`; $("lcPrev").innerHTML=""; return; }
+        $("lcMsg").textContent="";
+        const usos=[...new Map(d.reservas.map(r=>[`${r.fecha}__${r.vehiculo}__${r.ownerUid}`, r])).values()]
+          .sort((a,b)=> a.fecha<b.fecha?-1:1);
+        $("lcPrev").innerHTML=`
+          <div class="aviso-box" style="background:var(--ocup-bg); border-color:#f0b3b3; color:var(--ocup-tx)">
+            Se van a borrar <b>${d.reservas.length}</b> registro(s) de reserva
+            (${usos.length} salida${usos.length===1?"":"s"}), <b>${d.canceladas.length}</b> cancelación(es)
+            y <b>${d.cargos.length}</b> cargo(s).${d.enCatalogo?` También se quita <b>${esc(cc)}</b> de la lista de sugerencias.`:""}
+          </div>
+          ${usos.length?`<div class="rowlist" style="max-height:190px; overflow-y:auto">${usos.map(r=>{ const v=veh(r.vehiculo);
+            return `<div class="row"><div class="row-main">
+              <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)} · ${esc(r.nombre)}</div>
+              <div class="row-meta">${fechaLarga(r.fecha)}${r.gastoNafta?` · nafta ${moneda(r.gastoNafta)}`:""}</div></div></div>`;
+          }).join("")}</div>`:""}
+          <div class="frow" style="margin-top:12px"><label class="fld">Escribí <b>${esc(cc)}</b> para confirmar</label>
+            <input id="lcConf" type="text" autocomplete="off" placeholder="${esc(cc)}" /></div>`;
+        $("lcVer").textContent="Borrar definitivamente";
+        $("lcVer").className="btn";
+        $("lcVer").replaceWith($("lcVer").cloneNode(true));
+        $("lcVer").addEventListener("click", ()=>confirmarLimpiarCC(cc));
+        $("lcConf").focus();
+      });
+  });
+}
+async function confirmarLimpiarCC(cc){
+  if(($("lcConf").value||"").trim().toUpperCase()!==cc){
+    $("lcMsg").textContent=`Escribí ${cc} exactamente para confirmar.`; return; }
+  const d=loQueHayDelCC(cc);
+  $("lcMsg").textContent="Borrando…";
+  let n=0;
+  for(const r of d.reservas){   try{ await Store.borrarDefinitivo("flota_reservas", r.id); n++; }catch(e){ console.error(e); } }
+  for(const r of d.canceladas){ try{ await Store.borrarDefinitivo("flota_canceladas", r.id); n++; }catch(e){ console.error(e); } }
+  for(const r of d.cargos){     try{ await Store.borrarDefinitivo("flota_cargos", r.id); n++; }catch(e){ console.error(e); } }
+  if(d.enCatalogo){ try{ await Store.borrarDefinitivo("flota_cc", cc); }catch(e){ console.error(e); } }
+  cerrarModal();
+  toast(`${cc}: se borraron ${n} registro(s).`);
 }
 function abrirCargo(){
   if(!soyAdmin()){ toast("Solo un administrador puede registrar multas o siniestros."); return; }
@@ -2386,6 +2464,7 @@ document.body.addEventListener("click", e=>{
   const q=e.target.closest("[data-del]");    if(q){ cancelarReserva(q.dataset.del); return; }
   const v=e.target.closest("[data-ver]");    if(v){ verDetalle(v.dataset.ver); return; }
   const pe=e.target.closest("[data-pedirext]"); if(pe){ abrirPedidoExterno(); return; }
+  const lc=e.target.closest("[data-limpiarcc]"); if(lc){ abrirLimpiarCC(); return; }
   const nk=e.target.closest("[data-nuevocargo]"); if(nk){ abrirCargo(); return; }
   const bk=e.target.closest("[data-borrarcargo]"); if(bk){ borrarCargo(bk.dataset.borrarcargo); return; }
 });
