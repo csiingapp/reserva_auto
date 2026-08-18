@@ -323,7 +323,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.0</b> · limpieza de datos de prueba
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.1</b> · carga a nombre de terceros
   </footer>
 </div>
 
@@ -576,6 +576,7 @@ const state = {
   mes:[],             // reservas del mes seleccionado (estadísticas)
   ccs:[],             // catálogo de centros de costo
   cargos:[],          // multas, siniestros y otros cargos del mes (los carga la admin)
+  aNombreDe:null,     // solo admin: carga una reserva a nombre de otra persona
   canceladas:[],      // reservas dadas de baja en el mes elegido
   selCancel:new Set(),// selección múltiple para cancelar
   verTodas:false,     // los admins pueden ver las reservas de todo el equipo
@@ -1224,7 +1225,7 @@ function renderDia(){
     return `<div class="row${!dev&&est==="atrasada"?" late":""}">
       <div class="row-main">
         <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)} · ${esc(r.nombre)}</div>
-        <div class="row-meta">${etiquetaBloques(bl)}${r.comentarioSalida?` · ${esc(r.comentarioSalida)}`:""}${
+        <div class="row-meta">${etiquetaBloques(bl)}${r.cargadaPor?` · cargada por ${esc(r.cargadaPor)}`:""}${r.comentarioSalida?` · ${esc(r.comentarioSalida)}`:""}${
           sig?`<br>→ después lo usa <b>${esc(sig.nombre)}</b>, ${fechaLarga(sig.fecha)} ${inicioDe(sig)}`:""}</div>
         <div class="tags">${tags.join("")}</div>
       </div>
@@ -1843,22 +1844,32 @@ const esExtension=()=> abiertasDe().some(r=>r.vehiculo===state.pending);
 function pedirDatosReserva(){
   const v=veh(state.pending), dias=[...state.diasSel].sort();
   if(!dias.length){ toast("Elegí al menos un día."); return; }
-  { const t=deudaVehiculo(state.pending);
-    if(t.length){ const vid=state.pending; clearPending(); renderAutos(); avisarAutoTrabado(vid, t); return; } }
-  const deudas=deudasDevolucion();
-  if(deudas.length){ clearPending(); renderAutos(); avisarDeuda(deudas); return; }
-  const otras=abiertasDe().filter(r=>r.vehiculo!==state.pending);
-  if(otras.length){ const vid=state.pending; clearPending(); renderAutos(); avisarOtroAuto(vid, otras); return; }
+  if(!soyAdmin()){
+    const t=deudaVehiculo(state.pending);
+    if(t.length){ const vid=state.pending; clearPending(); renderAutos(); avisarAutoTrabado(vid, t); return; }
+    const deudas=deudasDevolucion();
+    if(deudas.length){ clearPending(); renderAutos(); avisarDeuda(deudas); return; }
+    const otras=abiertasDe().filter(r=>r.vehiculo!==state.pending);
+    if(otras.length){ const vid=state.pending; clearPending(); renderAutos(); avisarOtroAuto(vid, otras); return; }
+  }
   const bl=bloquesActivos();
   const sig=proximoUso(state.pending, dias[dias.length-1], bl[bl.length-1]);
   const EXT=esExtension();
   abrirModal(`
     <div class="pintitle">${v.emoji} ${esc(v.nombre)}</div>
     <p class="pinsub">${dias.length} día(s) · ${etiquetaTurno()}<br>${dias.map(fechaLarga).join(" · ")}</p>
-    ${EXT ? `<div class="aviso-box">🔁 Estás <b>extendiendo</b> tu salida con este vehículo: ya lo tenés sin devolver.
+    ${soyAdmin() ? `<div class="frow"><label class="fld">Reservar a nombre de</label>
+      <select id="fQuien">
+        <option value="">Yo · ${esc(state.nombre)}</option>
+        ${PERSONAS.filter(x=>x.email!==state.uid).slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"))
+          .map(x=>`<option value="${esc(x.email)}">${esc(x.nombre)}</option>`).join("")}
+      </select>
+      <div class="hint">Para cargar salidas de otras personas. La reserva queda a nombre de quien elijas
+        y con tu nombre como quien la registró.</div></div>`:""}
+    <div id="fExtBox">${EXT ? `<div class="aviso-box">🔁 Estás <b>extendiendo</b> tu salida con este vehículo: ya lo tenés sin devolver.
       Contanos por qué, así queda claro para el resto del equipo.</div>
       <div class="frow"><label class="fld">Motivo de la extensión *</label>
-        <select id="fMotExt"><option value="">Elegí…</option>${CONFIG.motivosExtension.map(m=>`<option>${m}</option>`).join("")}</select></div>`:""}
+        <select id="fMotExt"><option value="">Elegí…</option>${CONFIG.motivosExtension.map(m=>`<option>${m}</option>`).join("")}</select></div>`:""}</div>
     ${sig && sig.ownerUid!==state.uid ? `<div class="aviso-box">🤝 Después de tu turno lo usa <b>${esc(sig.nombre)}</b>, ${fechaLarga(sig.fecha)} a las ${inicioDe(sig)}. Tenelo en cuenta al elegir la hora de devolución.</div>`:""}
     <div class="frow">
       <label class="fld">Centro de costo (CC) del proyecto *</label>
@@ -1869,6 +1880,7 @@ function pedirDatosReserva(){
     <div class="frow"><label class="fld">¿A qué hora lo devolvés? *</label><input id="fHora" type="time" value="${horaSugerida()}" /></div>
     <div id="fLibBox">${bloqueLibreta()}</div>
     <div id="fTelBox">${bloqueTel()}</div>
+    <div id="fAvisoTercero"></div>
     <div class="frow">
       <label class="fld">Destino / observaciones al retirar (opcional)</label>
       <textarea id="fObsS" placeholder="Ej: relevamiento Ruta 8, km 32. Recibí el auto con poca nafta."></textarea>
@@ -1879,6 +1891,17 @@ function pedirDatosReserva(){
       <button id="mOk" class="btn">Reservar</button>
     </div>`, (w)=>{
       $("fCC").focus();
+      const q=w.querySelector("#fQuien");
+      if(q) q.addEventListener("change", ()=>{
+        const otro=!!q.value;
+        w.querySelector("#fLibBox").style.display = otro ? "none" : "";
+        w.querySelector("#fTelBox").style.display = otro ? "none" : "";
+        /* La extensión aplica a la salida propia: no corresponde al cargar para un tercero */
+        w.querySelector("#fExtBox").style.display = otro ? "none" : "";
+        w.querySelector("#fAvisoTercero").innerHTML = otro
+          ? `<div class="aviso-box">Estás cargando esta reserva a nombre de <b>${esc((persona(q.value)||{}).nombre||"")}</b>.
+             No se le piden libreta ni celular: los completa esa persona cuando reserve por su cuenta.</div>` : "";
+      });
       const cb=w.querySelector("#fTelCambiar"); if(cb) cb.addEventListener("click", pedirTelNuevo);
       const opts=w.querySelector("#fLibOpts");
       if(opts) opts.addEventListener("change", ()=>{
@@ -1887,34 +1910,45 @@ function pedirDatosReserva(){
   });
 }
 async function guardarReserva(){
-  { const t=deudaVehiculo(state.pending);
-    if(t.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarAutoTrabado(vid, t); return; } }
-  if(deudasDevolucion().length){ cerrarModal(); clearPending(); renderAutos();
-    avisarDeuda(deudasDevolucion()); return; }
-  { const otras=abiertasDe().filter(r=>r.vehiculo!==state.pending);
-    if(otras.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarOtroAuto(vid, otras); return; } }
+  if(!soyAdmin()){
+    const t=deudaVehiculo(state.pending);
+    if(t.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarAutoTrabado(vid, t); return; }
+    if(deudasDevolucion().length){ cerrarModal(); clearPending(); renderAutos();
+      avisarDeuda(deudasDevolucion()); return; }
+    const otras=abiertasDe().filter(r=>r.vehiculo!==state.pending);
+    if(otras.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarOtroAuto(vid, otras); return; }
+  }
   const cc=($("fCC").value||"").trim().toUpperCase();
   if(!cc){ $("mMsg").textContent="El centro de costo es obligatorio."; return; }
   const horaDev=$("fHora").value||"";
   if(!horaDev){ $("mMsg").textContent="Indicá a qué hora devolvés el auto."; return; }
   const obsS=($("fObsS").value||"").trim();
-  const ext=esExtension(), campoExt=$("fMotExt");
-  const motExt = campoExt ? (campoExt.value||"") : "";
+  const paraOtroPrev = !!($("fQuien") && $("fQuien").value);
+  const ext = !paraOtroPrev && esExtension(), campoExt=$("fMotExt");
+  const motExt = (ext && campoExt) ? (campoExt.value||"") : "";
   if(ext && !motExt){ $("mMsg").textContent="Elegí el motivo de la extensión."; return; }
-  const optLib=document.querySelector('#fLibOpts input[name="flib"]:checked');
-  const lib=optLib?optLib.value:"";
-  if(!lib){ $("mMsg").textContent="Marcá el estado de tu libreta de conducir."; return; }
-  const campoTel=$("fTel");
-  let tel=telDe(state.uid);
-  if(campoTel){
-    tel=normalizarTel(campoTel.value);
-    if(!telValido(tel)){ $("mMsg").textContent="Revisá el celular: poné tu número con característica, ej. 099 123 456."; return; }
-    try{ await Store.actualizarUsuario(state.uid,{ tel }); state.tels[state.uid]=tel; }
-    catch(e){ console.error(e); $("mMsg").textContent="No se pudo guardar tu celular. Reintentá."; return; }
-  }
-  if(lib!==state.libretas[state.uid]){
-    try{ await Store.actualizarUsuario(state.uid,{ libreta:lib, libretaTs:ahoraMs() }); state.libretas[state.uid]=lib; }
-    catch(e){ console.error(e); }
+  /* Un administrador puede estar cargando la reserva a nombre de otra persona */
+  const campoQuien=$("fQuien");
+  const paraOtro = !!(campoQuien && campoQuien.value);
+  const dueno = paraOtro ? (persona(campoQuien.value)||{}) : { email:state.uid, nombre:state.nombre };
+  let lib="";
+  if(!paraOtro){
+    const optLib=document.querySelector('#fLibOpts input[name="flib"]:checked');
+    lib=optLib?optLib.value:"";
+    if(!lib){ $("mMsg").textContent="Marcá el estado de tu libreta de conducir."; return; }
+    const campoTel=$("fTel");
+    if(campoTel){
+      const tel=normalizarTel(campoTel.value);
+      if(!telValido(tel)){ $("mMsg").textContent="Revisá el celular: poné tu número con característica, ej. 099 123 456."; return; }
+      try{ await Store.actualizarUsuario(state.uid,{ tel }); state.tels[state.uid]=tel; }
+      catch(e){ console.error(e); $("mMsg").textContent="No se pudo guardar tu celular. Reintentá."; return; }
+    }
+    if(lib!==state.libretas[state.uid]){
+      try{ await Store.actualizarUsuario(state.uid,{ libreta:lib, libretaTs:ahoraMs() }); state.libretas[state.uid]=lib; }
+      catch(e){ console.error(e); }
+    }
+  } else {
+    lib = state.libretas[dueno.email] || "";
   }
   const combS="";
   const vehId=state.pending, turnos=bloquesActivos(), dias=[...state.diasSel].sort();
@@ -1928,7 +1962,8 @@ async function guardarReserva(){
       let id=base, n=1;
       while(state.agenda.some(x=>x.id===id)){ n++; id=`${base}__${n}`; }
       const data={ id, fecha:dia, vehiculo:vehId, bloque:bid, cc, horaDevolucion:horaDev,
-        nombre:state.nombre, ownerUid:state.uid, creado:Date.now(),
+        nombre:dueno.nombre, ownerUid:dueno.email, creado:Date.now(),
+        cargadaPor: paraOtro ? state.nombre : "",
         combSalida:combS, kmSalida:null, comentarioSalida:obsS, libreta:lib,
         extension:ext, motivoExtension:motExt,
         demoraHora:"", demoraFecha:"", demoraMotivo:"", demoraTs:null,
@@ -1945,6 +1980,11 @@ async function guardarReserva(){
     await Store.addCC(cc, { codigo:cc, usos:((ex&&ex.usos)||0)+ok, ultimoUso:Date.now(), ultimaPersona:state.nombre }); }catch(e){}
   clearPending(); derivarDia(); renderAutos(); renderDia();
   if(!ok){ cerrarModal(); toast("Ese vehículo ya está reservado en esos días."); return; }
+  if(paraOtro){
+    cerrarModal();
+    toast(`Cargado a nombre de ${primerNombre(dueno.nombre)}: ${ok} día(s)${no?` · ${no} ya ocupado(s)`:""}.`);
+    return;
+  }
   mostrarConfirmacion(creadas, no, ext ? motExt : "");
 }
 function mostrarConfirmacion(reservas, fallidas, motivoExt){
@@ -2305,9 +2345,10 @@ async function exportarExcel(){
   /* ── Hoja 1: usos del mes ── */
   const cab=["Fecha","Vehículo","Matrícula","Persona","Libreta al día","Turno","Centro de costo",
     "Hora comprometida","Vuelve el (demora)","Demora avisada","Devuelto","En hora","Km al devolver",
-    "Nafta","Pago nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto"];
+    "Nafta","Pago nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto","Cargada por"];
   if(admin) cab.push("Alquiler imputado","Costo total del uso");
   cab.push("Requiere service","Obs. al retirar","Obs. al devolver");
+  /* "Cargada por" queda al final de los gastos, antes de los datos de service */
   const filas=[cab];
   usos.forEach(u=>{
     const v=veh(u.vehiculo);
@@ -2321,12 +2362,12 @@ async function exportarExcel(){
       u.devueltoTs? sellaFechaHora(u.devueltoTs) : "sin registrar",
       u.devueltoTs ? (u.devueltoTs<=lim+5*60000?"Sí":"No") : "",
       u.kmLlegada||"",
-      u.gastoNafta||0, u.pagoNafta||"", u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"" ];
+      u.gastoNafta||0, u.pagoNafta||"", u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"", u.cargadaPor||"" ];
     if(admin) f.push(Math.round(alq), Math.round(alq+gastos));
     f.push(u.requiereService?"Sí":"No", u.comentarioSalida||"", u.comentarioLlegada||"");
     filas.push(f);
   });
-  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,16,10,14,12,26];
+  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,16,10,14,12,26,20];
   if(admin) anchos.push(15,16);
   anchos.push(14,34,34);
   const ws1=hojaConAnchos(X, filas, anchos, [0]);
@@ -2441,12 +2482,16 @@ $("autos").addEventListener("click", e=>{ const b=e.target.closest(".auto"); if(
     return; }
   if(oc.mio){ toast("Ya tenés este vehículo reservado. Mirá el detalle del día para devolverlo, avisar demora o cancelar."); return; }
   if(state.pending===vehId){ clearPending(); renderAutos(); return; }
-  const trabado=deudaVehiculo(vehId);
-  if(trabado.length){ avisarAutoTrabado(vehId, trabado); return; }
-  const deudas=deudasDevolucion();
-  if(deudas.length){ avisarDeuda(deudas); return; }
-  const otros=vehiculosAbiertos().filter(id=>id!==vehId);
-  if(otros.length){ avisarOtroAuto(vehId, abiertasDe().filter(r=>r.vehiculo!==vehId)); return; }
+  /* Los administradores pueden cargar reservas sin las restricciones de uso:
+     las necesitan para registrar salidas anteriores a la app o a nombre de terceros. */
+  if(!soyAdmin()){
+    const trabado=deudaVehiculo(vehId);
+    if(trabado.length){ avisarAutoTrabado(vehId, trabado); return; }
+    const deudas=deudasDevolucion();
+    if(deudas.length){ avisarDeuda(deudas); return; }
+    const otros=vehiculosAbiertos().filter(id=>id!==vehId);
+    if(otros.length){ avisarOtroAuto(vehId, abiertasDe().filter(r=>r.vehiculo!==vehId)); return; }
+  }
   state.pending=vehId; state.diasSel=new Set([state.fecha]);
   renderAutos(); renderConfirm(); toast("Vehículo elegido. Confirmá abajo.");
 });
