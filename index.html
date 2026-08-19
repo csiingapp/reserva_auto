@@ -323,7 +323,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.2</b> · 94 personas
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.3</b> · dos autos, pero no el mismo día
   </footer>
 </div>
 
@@ -1721,6 +1721,23 @@ function abiertasDe(uid){
   return [...new Map(state.agenda.filter(r=>r.ownerUid===u && !r.devuelto)
     .map(r=>[`${r.fecha}__${r.vehiculo}`, r])).values()].sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
+/* Días que una salida ocupa de verdad: desde su fecha hasta la demora avisada, si la hay */
+function diasQueOcupa(r){
+  const out=[r.fecha];
+  if(demoraDeDias(r)){
+    const d=new Date(`${r.fecha}T12:00:00`), f=new Date(`${r.demoraFecha}T12:00:00`);
+    d.setDate(d.getDate()+1);
+    while(d<=f){ out.push(ymd(d)); d.setDate(d.getDate()+1); }
+  }
+  return out;
+}
+/* Reservas abiertas de OTRO vehículo cuyos días se pisan con los que se quieren reservar.
+   Se puede tener el Onix una semana y la Montana la siguiente: lo que no se puede es
+   tener dos autos el mismo día.                                                          */
+function choqueOtroAuto(vehId, dias){
+  const quiere=new Set(dias||[]);
+  return abiertasDe().filter(r=> r.vehiculo!==vehId && diasQueOcupa(r).some(d=>quiere.has(d)));
+}
 /* Vehículos distintos que la persona tiene sin devolver */
 const vehiculosAbiertos=(uid)=> [...new Set(abiertasDe(uid).map(r=>r.vehiculo))];
 /* Devoluciones de días ya pasados que la persona nunca registró */
@@ -1761,19 +1778,22 @@ function avisarAutoTrabado(vehId, deudas){
       : `Avisale a ${esc(primerNombre(r.nombre))} o a un administrador para que la registre.`}</div>
     <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`);
 }
-function avisarOtroAuto(vehId, abiertas){
-  const otro=veh(abiertas[0].vehiculo), pedido=veh(vehId);
+function avisarOtroAuto(vehId, choques, dias){
+  const otro=veh(choques[0].vehiculo), pedido=veh(vehId);
+  const pisados=[...new Set(choques.flatMap(r=>diasQueOcupa(r)).filter(d=>(dias||[]).includes(d)))].sort();
   abrirModal(`
-    <div class="pintitle">Ya tenés un vehículo sin devolver</div>
-    <p class="pinsub">Podés tener <b>un solo auto por vez</b>. Registrá la devolución de ${esc(otro?otro.nombre:abiertas[0].vehiculo)}
-      y después reservás ${esc(pedido?pedido.nombre:vehId)}.</p>
-    <div class="rowlist">${abiertas.map(r=>{ const v=veh(r.vehiculo);
+    <div class="pintitle">Ese día ya tenés otro vehículo</div>
+    <p class="pinsub">No se pueden tener <b>dos autos el mismo día</b>. Tenés ${esc(otro?otro.nombre:choques[0].vehiculo)}
+      reservado ${pisados.length===1?`el <b>${fechaLarga(pisados[0])}</b>`:`en ${pisados.length} de los días que elegiste`},
+      así que no podés sumar ${esc(pedido?pedido.nombre:vehId)} en ${pisados.length===1?"esa fecha":"esas fechas"}.</p>
+    <div class="rowlist">${choques.map(r=>{ const v=veh(r.vehiculo);
       return `<div class="row warn"><div class="row-main">
         <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)}</div>
-        <div class="row-meta">${fechaLarga(r.fecha)} · ${etiquetaBloques(hermanas(r,true).map(x=>x.bloque))} · devolvés ${esc(horaLimite(r))} · CC ${esc(r.cc||"—")}</div></div>
+        <div class="row-meta">${fechaLarga(r.fecha)}${demoraDeDias(r)?` al ${fechaLarga(r.demoraFecha)}`:""} · ${etiquetaBloques(hermanas(r,true).map(x=>x.bloque))} · CC ${esc(r.cc||"—")}</div></div>
         <div class="row-acts"><button class="btn ok tiny" data-dev="${esc(r.id)}">Registrar devolución</button></div></div>`;
     }).join("")}</div>
-    <div class="hint" style="margin-top:12px">Si necesitás más días con <b>el mismo auto</b>, podés reservarlos sin devolver.</div>
+    <div class="hint" style="margin-top:12px"><b>Sí podés</b> reservar el otro auto para <b>otros días</b>:
+      elegí una fecha en la que no tengas nada, o registrá la devolución de este.</div>
     <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`);
 }
 function clearPending(){ state.pending=null; state.diasSel=new Set(); renderConfirm(); }
@@ -1850,8 +1870,8 @@ function pedirDatosReserva(){
     if(t.length){ const vid=state.pending; clearPending(); renderAutos(); avisarAutoTrabado(vid, t); return; }
     const deudas=deudasDevolucion();
     if(deudas.length){ clearPending(); renderAutos(); avisarDeuda(deudas); return; }
-    const otras=abiertasDe().filter(r=>r.vehiculo!==state.pending);
-    if(otras.length){ const vid=state.pending; clearPending(); renderAutos(); avisarOtroAuto(vid, otras); return; }
+    const otras=choqueOtroAuto(state.pending, dias);
+    if(otras.length){ const vid=state.pending; clearPending(); renderAutos(); avisarOtroAuto(vid, otras, dias); return; }
   }
   const bl=bloquesActivos();
   const sig=proximoUso(state.pending, dias[dias.length-1], bl[bl.length-1]);
@@ -1916,8 +1936,8 @@ async function guardarReserva(){
     if(t.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarAutoTrabado(vid, t); return; }
     if(deudasDevolucion().length){ cerrarModal(); clearPending(); renderAutos();
       avisarDeuda(deudasDevolucion()); return; }
-    const otras=abiertasDe().filter(r=>r.vehiculo!==state.pending);
-    if(otras.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarOtroAuto(vid, otras); return; }
+    const otras=choqueOtroAuto(state.pending, [...state.diasSel]);
+    if(otras.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarOtroAuto(vid, otras, [...state.diasSel]); return; }
   }
   const cc=($("fCC").value||"").trim().toUpperCase();
   if(!cc){ $("mMsg").textContent="El centro de costo es obligatorio."; return; }
@@ -2490,8 +2510,8 @@ $("autos").addEventListener("click", e=>{ const b=e.target.closest(".auto"); if(
     if(trabado.length){ avisarAutoTrabado(vehId, trabado); return; }
     const deudas=deudasDevolucion();
     if(deudas.length){ avisarDeuda(deudas); return; }
-    const otros=vehiculosAbiertos().filter(id=>id!==vehId);
-    if(otros.length){ avisarOtroAuto(vehId, abiertasDe().filter(r=>r.vehiculo!==vehId)); return; }
+    const choques=choqueOtroAuto(vehId, [state.fecha]);
+    if(choques.length){ avisarOtroAuto(vehId, choques, [state.fecha]); return; }
   }
   state.pending=vehId; state.diasSel=new Set([state.fecha]);
   renderAutos(); renderConfirm(); toast("Vehículo elegido. Confirmá abajo.");
