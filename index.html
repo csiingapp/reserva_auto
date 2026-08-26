@@ -134,6 +134,8 @@
   .auto.ocup:hover{transform:none}
   .auto.mine{background:var(--mine-bg); border-color:var(--mine-bd); color:var(--mine-tx)}
   .auto.pend{background:#fff4e0; border-color:#d98b1f; border-style:dashed; color:#9a5b00}
+  .auto.dudoso{background:#f3eefc; border-color:#7c4dbd; color:#5a3490}
+  .chip.dudoso{background:#f3eefc; border-color:#7c4dbd}
   .auto-top{display:flex; align-items:center; gap:10px}
   .auto-emoji{font-size:1.9rem; line-height:1}
   .auto-nm{font-family:"Archivo"; font-weight:700; font-size:1.05rem; line-height:1.15}
@@ -274,6 +276,7 @@
         <span><i class="chip libre"></i> Libre</span>
         <span><i class="chip ocup"></i> Reservado</span>
         <span><i class="chip mine"></i> Tu reserva</span>
+        <span><i class="chip dudoso"></i> Devolución sin registrar</span>
       </div>
     </section>
 
@@ -323,8 +326,12 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.5</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v7.9</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v7.9 · mensaje más amable · copiar correcciones
+         v7.8 · 145 personas · confirmación de datos · mail en minúscula
+         v7.7 · color violeta para devolución sin registrar
+         v7.6 · máximo 5 días seguidos · confirmar llave sin devolución registrada
          v7.5 · pie sin detalle de la actualización
          v7.4 · 96 personas
          v7.3 · dos autos, pero no el mismo día
@@ -369,22 +376,39 @@ const VEHICULOS = [
    primera vez que reserva y lo guarda sola. Llenalo acá solo si querés
    precargar algún número: 598XXXXXXXX (sin espacios ni signos).
    El número NUNCA se muestra en pantalla: los demás solo ven el nombre.
+
+   verificar:true → el nombre se dedujo del mail de Nodum y puede estar mal escrito.
+   A esas personas la app les pide confirmar sus datos la primera vez que entran,
+   y te avisa en Estadísticas si alguien pidió una corrección. Cuando la apliques
+   acá, borrá el "verificar:true" de esa línea.
    ════════════════════════════════════════════════════════════════════════ */
 const PERSONAS = [
   { nombre:"Agustín Casares",           email:"acasares@csi-ing.com", tel:"" },
   { nombre:"Agustín Cortondo",          email:"acortondo@csi-ing.com", tel:"" },
   { nombre:"Agustín Méndez",            email:"amendezo@csi-ing.com", tel:"" },
   { nombre:"Agustina Acosta",           email:"agacosta@csi-ing.com", tel:"" },
+  { nombre:"Alejandro Gonzalez",        email:"agonzalez@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Alejandro Silvera",         email:"asilvera@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Alejandro Vital",           email:"avital@csi-ing.com", tel:"", verificar:true },
   { nombre:"Álvaro Izquierdo",          email:"aizquierdo@csi-ing.com", tel:"" },
+  { nombre:"Ana Cruz",                  email:"acruz@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ana Paula Sáez",            email:"asaez@csi-ing.com", tel:"" },
   { nombre:"Antonella Lobera",          email:"alobera@csi-ing.com", tel:"" },
   { nombre:"Antonio Martyniuk",         email:"amartyniuk@csi-ing.com", tel:"" },
   { nombre:"Aracely Gaona",             email:"agaonar@csi-ing.com", tel:"" },
   { nombre:"Betina Decejas",            email:"bdecejas@csi-ing.com", tel:"" },
+  { nombre:"Braian Texeira",            email:"btexeira@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Braulio Rodriguez",         email:"braurodrig@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Bruno Irrazabal",           email:"birrazabal@csi-ing.com", tel:"", verificar:true },
   { nombre:"Camila Fortunato",          email:"cfortunato@csi-ing.com", tel:"" },
   { nombre:"Catalina Peláez",           email:"cpelaez@csi-ing.com", tel:"" },
   { nombre:"Cecilia Ceiter",            email:"cceiter@csi-ing.com", tel:"" },
+  { nombre:"Cecilia Iriarte",           email:"ciriarte@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Cecilia Rumbo",             email:"crumbo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Cecilia Volpe",             email:"cvolpe@csi-ing.com", tel:"" },
+  { nombre:"Dahiana Arias",             email:"darias@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Dario Honegger",            email:"dahonegger@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Duncan Bell",               email:"dbell@csi-ing.com", tel:"", verificar:true },
   { nombre:"Eliana Amaral",             email:"eamaral@csi-ing.com", tel:"" },
   { nombre:"Emilia Varela",             email:"emvarela@csi-ing.com", tel:"" },
   { nombre:"Emiliano Gómez",            email:"egomez@csi-ing.com", tel:"" },
@@ -394,16 +418,30 @@ const PERSONAS = [
   { nombre:"Federico Barrios",          email:"fbarrios@csi-ing.com", tel:"" },
   { nombre:"Felipe Estavillo",          email:"festavillo@csi-ing.com", tel:"" },
   { nombre:"Fernando Díaz",             email:"fdiaz@csi-ing.com", tel:"" },
+  { nombre:"Fernando Regules",          email:"fregules@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Florencia Castro",          email:"fcastro@csi-ing.com", tel:"", verificar:true },
   { nombre:"Florencia Fros",            email:"ffros@csi-ing.com", tel:"" },
+  { nombre:"Francisco Bonizzi",         email:"fbonizzi@csi-ing.com", tel:"", verificar:true },
   { nombre:"Francisco Calvo",           email:"fcalvo@csi-ing.com", tel:"" },
   { nombre:"Franco Piñeyrúa",           email:"fpineyrua@csi-ing.com", tel:"" },
   { nombre:"Gaia Franzini",             email:"gfranzini@csi-ing.com", tel:"" },
   { nombre:"Gaston Coll",               email:"gcoll@csi-ing.com", tel:"" },
   { nombre:"Gerónimo Etchechury",       email:"getchechury@csi-ing.com", tel:"" },
   { nombre:"Gisele Pingaro",            email:"gpingaro@csi-ing.com", tel:"" },
+  { nombre:"Gonzalo Charquero",         email:"gcharquero@csi-ing.com", tel:"", verificar:true },
   { nombre:"Gonzalo Gutierrez",         email:"ggutierrez@csi-ing.com", tel:"" },
   { nombre:"Gonzalo Ramos",             email:"gramos@csi-ing.com", tel:"" },
+  { nombre:"Guzman Rippe",              email:"grippe@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Hector Silva",              email:"hsilva@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Hermes Cardozo",            email:"hcardozo@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Horacio Cerizola",          email:"hcerizola@csi-ing.com", tel:"", verificar:true },
+  { nombre:"I. Demello",                email:"idemello@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ismael Villanueva",         email:"ivillanueva@csi-ing.com", tel:"" },
+  { nombre:"J. Mnunez",                 email:"jmnunez@csi-ing.com", tel:"", verificar:true },
+  { nombre:"J. Ocastro",                email:"jocastro@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Javier Burgos",             email:"jburgos@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Jeremias Poletti",          email:"jpoletti@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Joaquin Gonzalez",          email:"joagonzale@csi-ing.com", tel:"", verificar:true },
   { nombre:"José Calviño",              email:"jcalvino@csi-ing.com", tel:"" },
   { nombre:"José Pedro Vidal",          email:"jpvidal@csi-ing.com", tel:"" },
   { nombre:"Jose Valena",               email:"jvalena@csi-ing.com", tel:"" },
@@ -419,29 +457,41 @@ const PERSONAS = [
   { nombre:"Lucas Levrini",             email:"llevrini@csi-ing.com", tel:"" },
   { nombre:"Lucas Padilla Segui",       email:"lpadilla@csi-ing.com", tel:"" },
   { nombre:"Luciana Paggiola",          email:"lpaggiola@csi-ing.com", tel:"" },
+  { nombre:"Luis Caycedo",              email:"lcaycedo@csi-ing.com", tel:"", verificar:true },
+  { nombre:"M. Eacuna",                 email:"meacuna@csi-ing.com", tel:"", verificar:true },
   { nombre:"Marcelo Rivero",            email:"mrivero@csi-ing.com", tel:"" },
   { nombre:"Marco Pérez",               email:"mperezr@csi-ing.com", tel:"" },
   { nombre:"María Belén Abal",          email:"mabal@csi-ing.com", tel:"" },
+  { nombre:"Maria Burmidad",            email:"mburmidad@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Maria Campanela",           email:"mcampanela@csi-ing.com", tel:"", verificar:true },
   { nombre:"María Frachia",             email:"mfrachia@csi-ing.com", tel:"" },
   { nombre:"María Mesa",                email:"mmesa@csi-ing.com", tel:"" },
   { nombre:"Mariano Artegoytia",        email:"martegoytia@csi-ing.com", tel:"" },
+  { nombre:"Martin Kenny",              email:"mkenny@csi-ing.com", tel:"", verificar:true },
   { nombre:"Martín Sanguinetti",        email:"msanguinetti@csi-ing.com", tel:"" },
   { nombre:"Martín Severi",             email:"maseveri@csi-ing.com", tel:"" },
   { nombre:"Martín Torregiani",         email:"mtorregiani@csi-ing.com", tel:"" },
   { nombre:"Martín Zeballos",           email:"mzeballos@csi-ing.com", tel:"" },
+  { nombre:"Mateo Leite",               email:"mleite@csi-ing.com", tel:"", verificar:true },
   { nombre:"Mateo Rocca",               email:"mrocca@csi-ing.com", tel:"" },
+  { nombre:"Mathias Acosta",            email:"macosta@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Mathias Casarotti",         email:"mcasarotti@csi-ing.com", tel:"", verificar:true },
   { nombre:"Matías Bardesio",           email:"mbardesio@csi-ing.com", tel:"" },
   { nombre:"Matías Castro",             email:"mcastro@csi-ing.com", tel:"" },
   { nombre:"Matías Gutiérrez",          email:"mgutierrez@csi-ing.com", tel:"" },
   { nombre:"Mauro Aguirregaray",        email:"maguirregaray@csi-ing.com", tel:"" },
   { nombre:"Mauro Bruzzone",            email:"mbruzzone@csi-ing.com", tel:"" },
   { nombre:"Maximiliano Rojas Mirazón", email:"mrojasm@csi-ing.com", tel:"" },
+  { nombre:"Maximiliano Toledo",        email:"mtoledo@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Micaela Bruno",             email:"mbruno@csi-ing.com", tel:"", verificar:true },
   { nombre:"Micaela Perdomo",           email:"mperdomo@csi-ing.com", tel:"" },
   { nombre:"Nartia Minini",             email:"nminini@csi-ing.com", tel:"" },
   { nombre:"Natalia Romay",             email:"nromay@csi-ing.com", tel:"" },
+  { nombre:"Nicolas Banchero",          email:"nbanchero@csi-ing.com", tel:"", verificar:true },
   { nombre:"Nicolás Cervino",           email:"ncervino@csi-ing.com", tel:"" },
   { nombre:"Nicolás Gremminger",        email:"ngremminger@csi-ing.com", tel:"" },
   { nombre:"Pablo Benia",               email:"pbenia@csi-ing.com", tel:"" },
+  { nombre:"Pablo Curbelo",             email:"pcurbelo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Paula Bonjour",             email:"pbonjour@csi-ing.com", tel:"" },
   { nombre:"Paula Garavagno",           email:"pgaravagno@csi-ing.com", tel:"" },
   { nombre:"Paula Ramos",               email:"pramos@csi-ing.com", tel:"" },
@@ -449,22 +499,33 @@ const PERSONAS = [
   { nombre:"Pilar Betancurt",           email:"pbetancurt@csi-ing.com", tel:"" },
   { nombre:"Pilar Llambi",              email:"pllambi@csi-ing.com", tel:"" },
   { nombre:"Pilar Luján",               email:"plujan@csi-ing.com", tel:"" },
+  { nombre:"R. Sclavi",                 email:"rsclavi@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Rafael Guasp",              email:"rguasp@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rafael Mateo",              email:"rmateo@csi-ing.com", tel:"" },
   { nombre:"Ramiro Alonso",             email:"ralonso@csi-ing.com", tel:"" },
+  { nombre:"Rebeca Suarez",             email:"rsuarez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rocío Rojas Romero",        email:"rrojasr@csi-ing.com", tel:"" },
   { nombre:"Rosana Guerrero",           email:"rguerrero@csi-ing.com", tel:"" },
+  { nombre:"Santiago Andregnette",      email:"sandregnet@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Santiago Bonora",           email:"sbonora@csi-ing.com", tel:"", verificar:true },
   { nombre:"Santiago Noboa",            email:"snoboa@csi-ing.com", tel:"" },
+  { nombre:"Santiago Uriarte",          email:"suriarte@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sebastián Rabelo Clavijo",  email:"srabelo@csi-ing.com", tel:"" },
   { nombre:"Silvio Martino",            email:"smartino@csi-ing.com", tel:"" },
   { nombre:"Sofía Roble",               email:"sroble@csi-ing.com", tel:"" },
+  { nombre:"Sofia Suberbie",            email:"ssuberbie@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Stefani Cardozo",           email:"stcardozo@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Tamara Specker",            email:"tspecker@csi-ing.com", tel:"", verificar:true },
   { nombre:"Valentín González",         email:"vgonzalezn@csi-ing.com", tel:"" },
   { nombre:"Valentina Illione",         email:"villione@csi-ing.com", tel:"" },
   { nombre:"Valentina Kautz",           email:"vkautz@csi-ing.com", tel:"" },
   { nombre:"Valentina Oliva",           email:"voliva@csi-ing.com", tel:"" },
   { nombre:"Valentina Varela",          email:"vvarela@csi-ing.com", tel:"" },
   { nombre:"Verónica Schiavo",          email:"vschiavo@csi-ing.com", tel:"" },
+  { nombre:"Victor Aguirre",            email:"vaguirre@csi-ing.com", tel:"", verificar:true },
   { nombre:"Victoria Candia",           email:"vcandia@csi-ing.com", tel:"" },
   { nombre:"Virginia Ruso",             email:"vruso@csi-ing.com", tel:"" },
+  { nombre:"Viviana Camps",             email:"vcamps@csi-ing.com", tel:"", verificar:true },
   { nombre:"Viviana Centurión",         email:"vcenturion@csi-ing.com", tel:"" },
   { nombre:"Viviana Gimenez",           email:"vgimenez@csi-ing.com", tel:"" },
 ];
@@ -527,8 +588,11 @@ const CONFIG = {
   /* 🚙 CUANDO NO QUEDA NINGÚN AUTO LIBRE
      A quién le llega el pedido de alquiler. La gestión con la rentadora la hace esa persona. */
   externo: {
-    destinatario: "DLopezS@ciemsi.com",
+    destinatario: "dlopezs@ciemsi.com",
   },
+  /* Máximo de días seguidos que una persona puede tener el mismo vehículo.
+     Si necesita más, corresponde pedir un alquiler por Nodum.                 */
+  maxDiasSeguidos: 5,
   /* Cuando alguien suma días a un auto que ya tiene sin devolver */
   motivosExtension: [
     "El trabajo en campo se extendió",
@@ -567,6 +631,11 @@ const veh=(id)=>VEHICULOS.find(v=>v.id===id);
 const fechaCorta=(f)=>{ const [a,m,d]=f.split("-"); return `${d}/${m}`; };
 const fechaLarga=(f)=>{ const dt=new Date(`${f}T12:00:00`); return `${DOW[dt.getDay()]} ${dt.getDate()} ${MON[dt.getMonth()]}`; };
 const persona=(email)=>PERSONAS.find(p=>p.email===email);
+/* Si la persona corrigió su nombre, ese es el que se muestra */
+const nombreDe=(email)=>{
+  const c=(state.correcciones||{})[email];
+  return (c && c.nombre) || (persona(email)||{}).nombre || email;
+};
 const primerNombre=(n)=>String(n||"").split(/\s+/)[0];
 const ahoraMs=()=>Date.now();   // (la copia de prueba reemplaza esto por un reloj simulado)
 /* El celular se usa solo para armar el enlace de WhatsApp: nunca se imprime */
@@ -579,6 +648,7 @@ const state = {
   fecha:null, bloque:CONFIG.bloques[0].id, ambos:true,
   tels:{},            // celulares guardados (nunca se muestran en pantalla)
   libretas:{},        // estado de la libreta de conducir de cada persona
+  correcciones:{},    // datos que la gente pidió corregir (nombre o mail)
   autos:{},           // datos permanentes de cada vehículo (último kilometraje)
   agenda:[],          // reservas desde hoy en adelante (todas las personas)
   reservas:{},        // derivado del día elegido: { "VEH__BLOQUE": reserva }
@@ -817,9 +887,10 @@ function subscribe(){
   Store.onPendientes((l)=>{ state.pendientes=l; renderPendientes(); renderAvisoMio(); renderAutos(); });
   Store.onCC((l)=>{ state.ccs=l.slice().sort((a,b)=>(b.usos||0)-(a.usos||0)); });
   Store.onVehiculos((l)=>{ const m={}; l.forEach(v=>{ m[v.id]=v; }); state.autos=m; });
-  Store.onUsuarios((l)=>{ const t={}, lb={};
-    l.forEach(u=>{ if(u.tel) t[u.email]=u.tel; if(u.libreta) lb[u.email]=u.libreta; });
-    state.tels=t; state.libretas=lb; });
+  Store.onUsuarios((l)=>{ const t={}, lb={}, co={};
+    l.forEach(u=>{ if(u.tel) t[u.email]=u.tel; if(u.libreta) lb[u.email]=u.libreta;
+      if(u.nombreReal || u.mailReal) co[u.email]={nombre:u.nombreReal||"", mail:u.mailReal||"", ts:u.datosTs||0}; });
+    state.tels=t; state.libretas=lb; state.correcciones=co; renderStats(); });
   subscribeMes();
 }
 function subscribeMes(){
@@ -882,12 +953,48 @@ async function hashPin(email, pin){
   }
   let h=0; for(let i=0;i<raw.length;i++){ h=(h*31 + raw.charCodeAt(i))|0; } return "x"+(h>>>0).toString(16);
 }
+/* Solo para los nombres deducidos del mail de Nodum: pedir confirmación una vez */
+function verificarDatos(p, usuario){
+  const w=$("pinWrap");
+  w.innerHTML=`<div class="pincard wide">
+      <div class="pintitle">Confirmá tus datos</div>
+      <p class="pinsub">Tu nombre lo tomamos del sistema de pedidos de vehículos y puede estar incompleto
+        o mal escrito. Revisalo antes de entrar: es el que va a ver el resto del equipo.</p>
+      <div class="frow"><label class="fld">Tu nombre y apellido</label>
+        <input id="vNom" type="text" value="${esc(p.nombre)}" autocomplete="off" /></div>
+      <div class="frow"><label class="fld">Tu correo de CSI</label>
+        <input id="vMail" type="text" value="${esc(p.email)}" autocomplete="off" />
+        <div class="hint">Si el correo está mal, corregilo igual: queda anotado para que un administrador lo aplique.</div></div>
+      <div class="pinmsg" id="vMsg"></div>
+      <div class="pinactions">
+        <button id="vOk" class="btn ghost">Está bien, entrar</button>
+        <button id="vGuardar" class="btn">Guardar y entrar</button>
+      </div>
+    </div>`;
+  w.hidden=false;
+  const seguir=()=>{ cerrarPin(); mostrarPin(p, usuario); };
+  $("vOk").addEventListener("click", async ()=>{
+    try{ await Store.actualizarUsuario(p.email,{ datosTs:ahoraMs() }); }catch(e){}
+    seguir();
+  });
+  $("vGuardar").addEventListener("click", async ()=>{
+    const n=($("vNom").value||"").trim(), m=($("vMail").value||"").trim().toLowerCase();
+    if(n.split(/\s+/).length<2){ $("vMsg").textContent="Poné tu nombre y tu apellido."; return; }
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m)){ $("vMsg").textContent="Revisá el correo."; return; }
+    try{
+      await Store.actualizarUsuario(p.email,{ nombreReal:n, mailReal: m===p.email?"":m, datosTs:ahoraMs() });
+      state.correcciones[p.email]={nombre:n, mail: m===p.email?"":m, ts:ahoraMs()};
+    }catch(e){ console.error(e); $("vMsg").textContent="No se pudo guardar. Reintentá."; return; }
+    seguir();
+  });
+}
 async function elegirPersona(persona){
   setLoginMsg("","");
   let u=null;
   try{ u = await Store.getUsuario(persona.email); }
   catch(e){ console.error(e); setLoginMsg("No se pudo verificar ahora. Reintentá en unos segundos.","err"); return; }
-  mostrarPin(persona, u);
+  const pedirDatos = persona.verificar && !((state.correcciones||{})[persona.email] || (u && u.datosTs));
+  if(pedirDatos) verificarDatos(persona, u); else mostrarPin(persona, u);
 }
 const cerrarPin=()=>{ const w=$("pinWrap"); w.hidden=true; w.innerHTML=""; };
 function mostrarPin(persona, u){
@@ -929,7 +1036,8 @@ function mostrarPin(persona, u){
   w.addEventListener("keydown", ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); done(); } });
 }
 function entrar(persona){
-  state.uid=persona.email; state.email=persona.email; state.nombre=persona.nombre;
+  state.uid=persona.email; state.email=persona.email;
+  state.nombre=nombreDe(persona.email)||persona.nombre;
   try{ localStorage.setItem("csi:persona", JSON.stringify({nombre:persona.nombre, email:persona.email})); }catch(e){}
   mostrarApp();
 }
@@ -1101,6 +1209,26 @@ function renderExterno(){
     </div>
   </div>`;
 }
+function avisarMaximoDias(vehId, racha){
+  const v=veh(vehId), max=CONFIG.maxDiasSeguidos;
+  abrirModal(`
+    <div class="pintitle">Son más de ${max} días seguidos</div>
+    <p class="pinsub">Con esta reserva tendrías ${esc(v?v.nombre:vehId)} <b>${racha.dias} días corridos</b>
+      (del ${fechaLarga(racha.desde)} al ${fechaLarga(racha.hasta)}).
+      El máximo por persona es de <b>${max} días</b>: para salidas más largas corresponde pedir un vehículo de alquiler.</p>
+    <div class="rowlist">
+      <div class="row"><div class="row-main">
+        <div class="row-nm">1 · Solicitá el vehículo por Nodum</div>
+        <div class="row-meta">Dejá registrado el pedido en el sistema, como cualquier compra.</div></div></div>
+      <div class="row"><div class="row-main">
+        <div class="row-nm">2 · Mandá el pedido por mail</div>
+        <div class="row-meta">Le llega a ${esc((CONFIG.externo||{}).destinatario||"—")} con los datos ya cargados.</div></div>
+        <div class="row-acts"><button class="btn tiny" data-pedirext>Preparar el mail</button></div></div>
+    </div>
+    <div class="hint" style="margin-top:12px">Si igual necesitás el auto de la empresa, reservá hasta ${max} días
+      y volvé a reservar más adelante, o pedile a una administradora que lo cargue.</div>
+    <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`);
+}
 function abrirPedidoExterno(){
   const E=CONFIG.externo||{};
   abrirModal(`
@@ -1186,10 +1314,13 @@ function renderAutos(){
         && (r.fecha===state.fecha || (state.fecha===hoyStr && r.fecha<hoyStr)))
       .sort((a,b)=> a.fecha<b.fecha?-1:1)[0];
     const trabado=deudaVehiculo(v.id);
-    if(trabado.length && cls==="libre"){ cls="ocup"; estado="Sin devolver"; dis='aria-disabled="true"';
-      sub=`No se puede reservar hasta cerrar la salida del ${fechaCorta(trabado[0].fecha)}`; }
+    if(trabado.length && cls==="libre"){ cls="dudoso"; estado="Devolución sin registrar";
+      sub=`${esc(primerNombre(trabado[0].nombre))} no la cerró · tocá para verificar si la llave está`; }
+    /* alguien ya confirmó que la llave está físicamente disponible */
+    const confirmada=state.pendientes.filter(r=>r.vehiculo===v.id && r.llaveConfirmada && fechaLimite(r)<ymd(new Date()))[0];
     let flag="";
     if(trabado.length) flag=`<span class="auto-flag">⏰ sin devolver · ${esc(primerNombre(trabado[0].nombre))}, ${fechaCorta(trabado[0].fecha)}</span>`;
+    else if(confirmada && cls==="libre") flag=`<span class="auto-flag">🔑 llave confirmada por ${esc(primerNombre(confirmada.llaveConfirmadaPor||""))}</span>`;
     else if(dem) flag=`<span class="auto-flag">🕒 vuelve ${demoraDeDias(dem)?fechaCorta(dem.demoraFecha)+" ":"~"}${esc(dem.demoraHora)} (${esc(primerNombre(dem.nombre))})</span>`;
     else if(atras) flag=`<span class="auto-flag">⏰ sin devolver · ${esc(primerNombre(atras.nombre))}, ${fechaCorta(atras.fecha)}</span>`;
     return `<button class="auto ${cls}" data-veh="${v.id}" ${dis}>
@@ -1358,6 +1489,25 @@ function renderStats(){
         return e.length ? `<ul>${e.map(([k,v])=>`<li><span>${esc(k)}</span><b>${moneda(v)}</b></li>`).join("")}</ul>`
                         : `<div class="empty">Sin cargas de nafta este mes.</div>`;
       })()}</div>`:""}
+      ${admin?(()=>{
+        const lista=Object.entries(state.correcciones||{}).map(([mail,c])=>{
+          const p=persona(mail)||{};
+          const cambioNombre = !!(c.nombre && c.nombre!==p.nombre);
+          const cambioMail   = !!(c.mail && c.mail!==mail);
+          return (cambioNombre||cambioMail) ? {mail,p,c,cambioNombre,cambioMail} : null;
+        }).filter(Boolean).sort((a,b)=>(b.c.ts||0)-(a.c.ts||0));
+        return `<div class="pcol"><h4>✏️ Datos que pidieron corregir</h4>${
+          lista.length ? `<ul>${lista.map(x=>`<li><span>
+              ${x.cambioNombre
+                ? `<b>${esc(x.c.nombre)}</b><br><span style="color:var(--muted); font-size:.8rem">figura como ${esc(x.p.nombre||"—")}</span>`
+                : `<b>${esc(x.p.nombre||x.mail)}</b>`}
+              ${x.cambioMail?`<br><span style="color:var(--brand-d)">correo nuevo: ${esc(x.c.mail)}</span>
+                 <span style="color:var(--muted); font-size:.8rem">(hoy ${esc(x.mail)})</span>`:""}
+            </span></li>`).join("")}</ul>
+            <div class="btnrow" style="margin-top:8px"><button class="btn ghost tiny" data-copiarcorr>📋 Copiar las líneas para PERSONAS</button></div>
+            <div class="hint" style="margin-top:6px">La app ya muestra los nombres corregidos: esto es solo para dejar el archivo al día.</div>`
+          : `<div class="empty">Nadie pidió correcciones.</div>`}</div>`;
+      })():""}
       <div class="pcol"><h4>🔧 Reportes de service</h4>${
         services.length
           ? `<ul>${services.map(u=>`<li><span>${esc(veh(u.vehiculo)?veh(u.vehiculo).nombre:u.vehiculo)} · ${fechaCorta(u.fecha)}<br><span style="color:var(--muted);font-size:.8rem">${esc(u.comentarioLlegada||"sin detalle")}</span></span></li>`).join("")}</ul>`
@@ -1720,7 +1870,7 @@ const nivelOptions=(sel)=>`<option value=""${sel?"":" selected"}>Elegí…</opti
 /* Salidas de días ya pasados que nadie cerró: el auto quedó sin devolver y no se sabe dónde está */
 function deudaVehiculo(vehId){
   const hoy=ymd(new Date());
-  const l=state.pendientes.filter(r=>r.vehiculo===vehId && fechaLimite(r)<hoy);
+  const l=state.pendientes.filter(r=>r.vehiculo===vehId && fechaLimite(r)<hoy && !r.llaveConfirmada);
   return [...new Map(l.map(r=>[`${r.fecha}__${r.ownerUid}`, r])).values()]
     .sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
@@ -1729,6 +1879,25 @@ function abiertasDe(uid){
   const u=uid||state.uid;
   return [...new Map(state.agenda.filter(r=>r.ownerUid===u && !r.devuelto)
     .map(r=>[`${r.fecha}__${r.vehiculo}`, r])).values()].sort((a,b)=> a.fecha<b.fecha?-1:1);
+}
+/* Días seguidos que quedarían con ese vehículo, sumando lo ya reservado y lo que se quiere agregar */
+function rachaMasLarga(vehId, diasNuevos, uid){
+  const dueño=uid||state.uid;
+  const set=new Set(diasNuevos||[]);
+  [...state.agenda, ...state.pendientes].forEach(r=>{
+    if(r.vehiculo!==vehId || r.ownerUid!==dueño || r.devuelto) return;
+    diasQueOcupa(r).forEach(d=>set.add(d));
+  });
+  const dias=[...set].sort();
+  let mejor=0, largo=0, ini=null, finIni=null, finFin=null, prev=null;
+  dias.forEach(d=>{
+    const hoy=new Date(`${d}T12:00:00`);
+    const seguido = prev && Math.round((hoy-prev)/86400000)===1;
+    if(seguido){ largo++; } else { largo=1; ini=d; }
+    if(largo>mejor){ mejor=largo; finIni=ini; finFin=d; }
+    prev=hoy;
+  });
+  return { dias:mejor, desde:finIni, hasta:finFin };
 }
 /* Días que una salida ocupa de verdad: desde su fecha hasta la demora avisada, si la hay */
 function diasQueOcupa(r){
@@ -1772,20 +1941,49 @@ function avisarDeuda(deudas){
 }
 function avisarAutoTrabado(vehId, deudas){
   const v=veh(vehId), r=deudas[0], mio=r.ownerUid===state.uid, puede=mio||soyAdmin();
+  const tel=telDe(r.ownerUid);
+  const msg=`Hola ${primerNombre(r.nombre)}, ¿cómo va? Soy ${state.nombre}. `
+    + `Te consulto por el ${v?v.nombre:vehId}: en la app figura sin devolver desde el ${fechaLarga(r.fecha)}. `
+    + `¿Lo estás usando todavía o ya lo dejaste? Lo necesitaría, pero si lo tenés vos me organizo de otra forma, sin problema. `
+    + `Si ya lo devolviste, cuando puedas registrá la devolución en la app, por favor, así queda al día. ¡Gracias!`;
   abrirModal(`
-    <div class="pintitle">Este auto quedó sin devolver</div>
-    <p class="pinsub">${esc(v?v.nombre:vehId)} tiene una salida del <b>${fechaLarga(r.fecha)}</b> que nunca se cerró.
-      Hasta que se registre la devolución no se puede reservar: nadie sabe en qué estado está ni dónde quedó la llave.</p>
+    <div class="pintitle">La devolución no está registrada</div>
+    <p class="pinsub">${esc(v?v.nombre:vehId)} tiene una salida del <b>${fechaLarga(r.fecha)}</b> que nadie cerró en la app.
+      Puede que el auto esté disponible y solo falte el registro, o que todavía lo tengan.</p>
     <div class="rowlist">${deudas.map(x=>`<div class="row late"><div class="row-main">
         <div class="row-nm">${esc(x.nombre)}</div>
         <div class="row-meta">${fechaLarga(x.fecha)} · CC ${esc(x.cc||"—")} · debía devolverlo ${esc(horaLimite(x))}</div></div>
         ${(x.ownerUid===state.uid||soyAdmin())
           ? `<div class="row-acts"><button class="btn ok tiny" data-dev="${esc(x.id)}">Registrar devolución</button></div>`:""}
       </div>`).join("")}</div>
-    <div class="hint" style="margin-top:12px">${puede
-      ? "Registrá la devolución y el auto queda liberado en el momento."
-      : `Avisale a ${esc(primerNombre(r.nombre))} o a un administrador para que la registre.`}</div>
-    <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`);
+    ${puede ? `<div class="hint" style="margin-top:12px">Registrá la devolución y el auto queda liberado en el momento.</div>`
+    : `<div class="aviso-box" style="margin-top:14px">Antes de tomarlo, <b>confirmá con ${esc(primerNombre(r.nombre))}</b>
+         o fijate si la llave está en su lugar.</div>
+       <div class="btnrow">
+         ${tel?`<button class="btn wa" data-watrabado="${esc(tel)}" data-msg="${esc(msg)}">💬 Preguntarle a ${esc(primerNombre(r.nombre))}</button>`
+              :`<button class="btn ghost" data-coptrabado="${esc(msg)}">📋 Copiar mensaje</button>`}
+         <button class="btn" data-confirmarllave="${esc(r.id)}">🔑 La llave está, puedo usarlo</button>
+       </div>
+       <div class="hint" style="margin-top:10px">Al confirmar, el auto queda disponible para reservar y se avisa que
+         ${esc(primerNombre(r.nombre))} todavía debe registrar su devolución. Queda anotado quién lo confirmó.</div>`}
+    <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`, (w)=>{
+      const b=w.querySelector("[data-watrabado]");
+      if(b) b.addEventListener("click",()=>window.open(linkWA(b.dataset.watrabado, b.dataset.msg),"_blank"));
+      const c=w.querySelector("[data-coptrabado]");
+      if(c) c.addEventListener("click",()=>copiar(c.dataset.coptrabado));
+  });
+}
+async function confirmarLlave(id){
+  const r=buscarReserva(id); if(!r) return;
+  const v=veh(r.vehiculo);
+  if(!confirm(`¿Confirmás que ${v?v.nombre:r.vehiculo} está disponible y la llave está en su lugar?\n\n`
+    + `${primerNombre(r.nombre)} va a seguir teniendo que registrar su devolución.`)) return;
+  const meta={ llaveConfirmada:true, llaveConfirmadaPor:state.nombre, llaveConfirmadaTs:ahoraMs() };
+  for(const ex of hermanas(r, true)){
+    try{ await Store.actualizar(ex.id, meta); }catch(e){ console.error(e); }
+  }
+  cerrarModal();
+  toast(`${v?v.nombre:r.vehiculo} queda disponible. ${primerNombre(r.nombre)} sigue debiendo la devolución.`);
 }
 function avisarOtroAuto(vehId, choques, dias){
   const otro=veh(choques[0].vehiculo), pedido=veh(vehId);
@@ -1818,6 +2016,11 @@ function renderConfirm(){
     <div class="cb-top"><b>${v.emoji} ${esc(v.nombre)}</b> · ${etiquetaTurno()}</div>
     <div class="cb-sub">Elegí los días (podés marcar varios seguidos):</div>
     <div class="dchips">${chips}</div>
+    ${(()=>{ if(soyAdmin()) return "";
+      const r=rachaMasLarga(state.pending, [...state.diasSel]);
+      return r.dias>CONFIG.maxDiasSeguidos
+        ? `<div class="cb-sub" style="color:var(--ocup-tx)">⚠️ Serían <b>${r.dias} días seguidos</b>: el máximo es ${CONFIG.maxDiasSeguidos}. Para más, pedí un alquiler por Nodum.</div>`
+        : ""; })()}
     <div class="cb-actions">
       <button id="btnConfirmar" class="btn">Continuar (${state.diasSel.size} día/s)</button>
       <button id="btnDescartar" class="btn ghost">Descartar</button>
@@ -1881,6 +2084,8 @@ function pedirDatosReserva(){
     if(deudas.length){ clearPending(); renderAutos(); avisarDeuda(deudas); return; }
     const otras=choqueOtroAuto(state.pending, dias);
     if(otras.length){ const vid=state.pending; clearPending(); renderAutos(); avisarOtroAuto(vid, otras, dias); return; }
+    const racha=rachaMasLarga(state.pending, dias);
+    if(racha.dias>CONFIG.maxDiasSeguidos){ const vid=state.pending; clearPending(); renderAutos(); avisarMaximoDias(vid, racha); return; }
   }
   const bl=bloquesActivos();
   const sig=proximoUso(state.pending, dias[dias.length-1], bl[bl.length-1]);
@@ -1947,6 +2152,8 @@ async function guardarReserva(){
       avisarDeuda(deudasDevolucion()); return; }
     const otras=choqueOtroAuto(state.pending, [...state.diasSel]);
     if(otras.length){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarOtroAuto(vid, otras, [...state.diasSel]); return; }
+    const racha=rachaMasLarga(state.pending, [...state.diasSel]);
+    if(racha.dias>CONFIG.maxDiasSeguidos){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarMaximoDias(vid, racha); return; }
   }
   const cc=($("fCC").value||"").trim().toUpperCase();
   if(!cc){ $("mMsg").textContent="El centro de costo es obligatorio."; return; }
@@ -1997,7 +2204,7 @@ async function guardarReserva(){
         combSalida:combS, kmSalida:null, comentarioSalida:obsS, libreta:lib,
         extension:ext, motivoExtension:motExt,
         demoraHora:"", demoraFecha:"", demoraMotivo:"", demoraTs:null,
-        devuelto:false, devueltoTs:null, devueltoPor:null,
+        devuelto:false, devueltoTs:null, devueltoPor:null, llaveConfirmada:false,
         combLlegada:"", kmLlegada:null, comentarioLlegada:"", requiereService:false,
         gastoNafta:0, pagoNafta:"", gastoPeaje:0, sinPeaje:false, gastoEstac:0, sinEstac:false, gastoImprev:0, detalleImprev:"" };
       try{ await Store.reservar(id,data); creados.push(id); if(!primera) primera=data; }
@@ -2539,6 +2746,17 @@ document.body.addEventListener("click", e=>{
   const q=e.target.closest("[data-del]");    if(q){ cancelarReserva(q.dataset.del); return; }
   const v=e.target.closest("[data-ver]");    if(v){ verDetalle(v.dataset.ver); return; }
   const pe=e.target.closest("[data-pedirext]"); if(pe){ abrirPedidoExterno(); return; }
+  if(e.target.closest("[data-copiarcorr]")){
+    const l=Object.entries(state.correcciones||{}).map(([mail,c])=>{
+      const p=persona(mail)||{};
+      if(!((c.nombre && c.nombre!==p.nombre) || (c.mail && c.mail!==mail))) return null;
+      const nom=c.nombre||p.nombre||"", mm=c.mail||mail;
+      return `  { nombre:"${nom}",${" ".repeat(Math.max(1,30-nom.length))}email:"${mm}", tel:"" },`
+           + (c.mail && c.mail!==mail ? `   // ← correo cambiado, antes ${mail}` : "");
+    }).filter(Boolean);
+    copiar(l.join("\n")); return;
+  }
+  const cl=e.target.closest("[data-confirmarllave]"); if(cl){ confirmarLlave(cl.dataset.confirmarllave); return; }
   const lc=e.target.closest("[data-limpiarcc]"); if(lc){ abrirLimpiarCC(); return; }
   const nk=e.target.closest("[data-nuevocargo]"); if(nk){ abrirCargo(); return; }
   const bk=e.target.closest("[data-borrarcargo]"); if(bk){ borrarCargo(bk.dataset.borrarcargo); return; }
