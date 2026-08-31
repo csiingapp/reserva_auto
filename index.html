@@ -326,8 +326,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v8.2</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v8.3</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v8.3 · 8 personas más · búsqueda por apodo y sin acentos
          v8.2 · Pilar Luján
          v8.1 · corregir el odómetro · gana el registro más reciente
          v8.0 · lista según Nodum (801) · odómetro base · km del mes
@@ -380,6 +381,7 @@ const VEHICULOS = [
    precargar algún número: 598XXXXXXXX (sin espacios ni signos).
    El número NUNCA se muestra en pantalla: los demás solo ven el nombre.
 
+   apodo:"..."    → nombre por el que también se lo conoce; el buscador lo encuentra igual.
    verificar:true → el nombre se dedujo del mail de Nodum y puede estar mal escrito.
    A esas personas la app les pide confirmar sus datos la primera vez que entran,
    y te avisa en Estadísticas si alguien pidió una corrección. Cuando la apliques
@@ -394,6 +396,7 @@ const PERSONAS = [
   { nombre:"Agustin Colacce",           email:"acolacce@csi-ing.com", tel:"", verificar:true },
   { nombre:"Agustin Delgue",            email:"adelgue@csi-ing.com", tel:"", verificar:true },
   { nombre:"Agustin Garabedian",        email:"agarabedian@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Agustín Méndez",            email:"amendezo@csi-ing.com", tel:"" },
   { nombre:"Agustin Rios",              email:"arios@csi-ing.com", tel:"", verificar:true },
   { nombre:"Agustin Vanrell",           email:"avanrell@csi-ing.com", tel:"", verificar:true },
   { nombre:"Agustina Sum",              email:"asum@csi-ing.com", tel:"", verificar:true },
@@ -458,6 +461,7 @@ const PERSONAS = [
   { nombre:"Antonio Castillo",          email:"acastillo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Antonio Cetrangolo",        email:"acetrangolo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Antonio Figueroa",          email:"afigueroa@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Antonio Martyniuk",         email:"amartyniuk@csi-ing.com", tel:"" },
   { nombre:"Arce Luz",                  email:"aluz@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ariel Duche",               email:"aduche@csi-ing.com", tel:"", verificar:true },
   { nombre:"Aristimuno Anthony",        email:"aanthony@csi-ing.com", tel:"", verificar:true },
@@ -577,6 +581,7 @@ const PERSONAS = [
   { nombre:"Eduardo Muniz",             email:"emuniz@csi-ing.com", tel:"", verificar:true },
   { nombre:"Eduardo Newton",            email:"enewton@csi-ing.com", tel:"", verificar:true },
   { nombre:"Eduardo Rodriguez",         email:"erodriguez@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Edwar Acosta",              email:"eacosta@csi-ing.com", tel:"", apodo:"Turbina" },
   { nombre:"Elisa Vignale",             email:"evignale@csi-ing.com", tel:"", verificar:true },
   { nombre:"Elsa Allende",              email:"eallende@csi-ing.com", tel:"", verificar:true },
   { nombre:"Emilia Varela",             email:"emvarela@csi-ing.com", tel:"" },
@@ -588,6 +593,7 @@ const PERSONAS = [
   { nombre:"Emmanuel Santellan",        email:"esantellan@csi-ing.com", tel:"", verificar:true },
   { nombre:"Enzo Javier",               email:"ejavier@csi-ing.com", tel:"", verificar:true },
   { nombre:"Enzo Panza",                email:"epanza@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Enzo Piovano",              email:"epiovano@csi-ing.com", tel:"" },
   { nombre:"Enzo Rosso",                email:"erosso@csi-ing.com", tel:"", verificar:true },
   { nombre:"Esposito Sharon",           email:"esharon@csi-ing.com", tel:"", verificar:true },
   { nombre:"Esteban Abalo",             email:"eabalo@csi-ing.com", tel:"", verificar:true },
@@ -829,6 +835,7 @@ const PERSONAS = [
   { nombre:"Lorena Leone",              email:"lleone@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lucas Alvarez",             email:"lalvarez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lucas Levin",               email:"llevin@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Lucas Padilla",             email:"lpadilla@csi-ing.com", tel:"" },
   { nombre:"Lucia Barata",              email:"lbarata@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lucia Illarietti",          email:"lillarietti@csi-ing.com", tel:"", verificar:true },
   { nombre:"Luciana Paggiola",          email:"lpaggiola@csi-ing.com", tel:"" },
@@ -860,6 +867,7 @@ const PERSONAS = [
   { nombre:"Marcelo Perroux",           email:"mperroux@csi-ing.com", tel:"", verificar:true },
   { nombre:"Marcelo Recalde",           email:"mrecalde@csi-ing.com", tel:"", verificar:true },
   { nombre:"Marco Cabral",              email:"mcabral@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Marco Pérez",               email:"mperezr@csi-ing.com", tel:"" },
   { nombre:"Marco Valdez",              email:"mvaldez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Marcos Ferrando",           email:"mferrando@csi-ing.com", tel:"", verificar:true },
   { nombre:"Marcos Germano",            email:"mgermano@csi-ing.com", tel:"", verificar:true },
@@ -1136,6 +1144,7 @@ const PERSONAS = [
   { nombre:"Sergio Honegger",           email:"shonegger@csi-ing.com", tel:"", verificar:true },
   { nombre:"Silvana Candia",            email:"scandia@csi-ing.com", tel:"", verificar:true },
   { nombre:"Silvana Fadul",             email:"sfadul@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Silvio Martino",            email:"smartino@csi-ing.com", tel:"" },
   { nombre:"Simon Felix",               email:"sfelix@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sofia Aristimuno",          email:"saristimuno@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sofia Capeci",              email:"scapeci@csi-ing.com", tel:"", verificar:true },
@@ -1154,6 +1163,7 @@ const PERSONAS = [
   { nombre:"Termezana Jeraldo",         email:"tjeraldo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Thadeo Peraza",             email:"tperaza@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ungo Faustina",             email:"ufaustina@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Valentín González",         email:"vgonzalezn@csi-ing.com", tel:"", apodo:"Toquito" },
   { nombre:"Valentina Ibarra",          email:"vibarra@csi-ing.com", tel:"", verificar:true },
   { nombre:"Valentina Kautz",           email:"vkautz@csi-ing.com", tel:"" },
   { nombre:"Valentina Lostao",          email:"vlostao@csi-ing.com", tel:"", verificar:true },
@@ -1605,15 +1615,21 @@ function mostrarPicker(){
   const b=$("buscar"); if(b) b.value=""; renderPicker("");
 }
 const iniciales=(n)=> n.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]||"").join("").toUpperCase();
+/* Busca sin acentos, y también por apodo: escribiendo "turbina" aparece Edwar Acosta */
+const sinTildes=(t)=>(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
 function renderPicker(filtro){
-  const f=(filtro||"").trim().toLowerCase();
-  const lista=PERSONAS.filter(p=> !f || p.nombre.toLowerCase().includes(f) || p.email.toLowerCase().includes(f))
+  const f=sinTildes((filtro||"").trim());
+  const lista=PERSONAS.filter(p=> !f
+      || sinTildes(p.nombre).includes(f)
+      || sinTildes(p.email).includes(f)
+      || sinTildes(p.apodo||"").includes(f))
     .slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"));
   const cont=$("listaNombres");
   if(!lista.length){ cont.innerHTML=`<div class="pnone">No encontramos ese nombre. Probá con otra parte.</div>`; return; }
   cont.innerHTML=lista.map(p=>`<button class="pbtn" data-email="${esc(p.email)}">
       <span class="av">${iniciales(p.nombre)}</span>
-      <span><span class="nm">${esc(p.nombre)}</span><span class="em">${esc(p.email)}</span></span></button>`).join("");
+      <span><span class="nm">${esc(p.nombre)}${p.apodo?` <span style="font-weight:400; color:var(--muted)">· ${esc(p.apodo)}</span>`:""}</span>
+        <span class="em">${esc(p.email)}</span></span></button>`).join("");
   if(state.authError) setLoginMsg(state.authError,"err");
 }
 async function hashPin(email, pin){
