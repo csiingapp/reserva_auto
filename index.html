@@ -326,9 +326,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v8.0</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v8.1</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
-         v8.0 · alta de personas desde la app
+         v8.1 · corregir el odómetro · gana el registro más reciente
          v8.0 · lista según Nodum (801) · odómetro base · km del mes
          v7.9 · mensaje más amable · copiar correcciones
          v7.8 · 145 personas · confirmación de datos · mail en minúscula
@@ -1033,7 +1033,6 @@ const PERSONAS = [
   { nombre:"Pedro Lenzi",               email:"plenzi@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pepelescov Michael",        email:"pmichael@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pilar Galan",               email:"pgalan@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Pilar Lujan",               email:"plujan@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pineyro Melanie",           email:"pmelanie@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pintos Martina",            email:"pmartina@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pose Caren",                email:"pcaren@csi-ing.com", tel:"", verificar:true },
@@ -1331,26 +1330,32 @@ const ordenBloque=(bid)=> CONFIG.bloques.findIndex(b=>b.id===bid);
 
 /* Último kilometraje registrado de un vehículo, mirando todo el historial disponible.
    Si se pasa "excluir", ignora esa salida (sirve al corregir una devolución ya hecha). */
+/* Kilometraje de referencia de un vehículo.
+   Gana el registro MÁS RECIENTE, no el más alto: así un número mal tipeado
+   se puede corregir y deja de trabar a todo el mundo.                       */
 function ultimoKm(vehId, excluirId){
-  let mejor=null;
+  const cands=[];
   const base=(CONFIG.kmInicial||{})[vehId];
-  if(base) mejor={ km:base, fecha:"", nombre:"", base:true };
-  const considerar=(km, fecha, nombre)=>{
-    if(!km) return;
-    if(!mejor || km>mejor.km) mejor={ km, fecha, nombre };
-  };
-  /* 1) el dato permanente del vehículo: sobrevive aunque la salida sea de meses atrás */
+  if(base) cands.push({ km:base, fecha:"", nombre:"", ts:0, base:true });
+
+  /* dato permanente del vehículo: sobrevive aunque la salida sea de meses atrás */
   const a=state.autos[vehId];
-  if(a && (!excluirId || a.ultimoKmId!==excluirId)) considerar(a.ultimoKm, a.ultimoKmFecha, a.ultimoKmPor);
-  /* 2) lo que haya cargado en memoria, por si algo quedó más adelante */
+  if(a && a.ultimoKm && (!excluirId || a.ultimoKmId!==excluirId))
+    cands.push({ km:a.ultimoKm, fecha:a.ultimoKmFecha||"", nombre:a.ultimoKmPor||"",
+                 ts:a.ultimoKmTs||1, corregido:!!a.corregido });
+
+  /* devoluciones cargadas en memoria */
   const vistos=new Map();
   [...state.agenda, ...state.pendientes, ...state.mes].forEach(r=>{ if(r && r.id) vistos.set(r.id, r); });
   vistos.forEach(r=>{
     if(r.vehiculo!==vehId || !r.kmLlegada) return;
     if(excluirId && r.id===excluirId) return;
-    considerar(r.kmLlegada, r.fecha, r.nombre);
+    cands.push({ km:r.kmLlegada, fecha:r.fecha, nombre:r.nombre, ts:r.devueltoTs||1 });
   });
-  return mejor;   // { km, fecha, nombre } o null si nunca se registró
+  if(!cands.length) return null;
+  /* el más reciente; si empatan en fecha, el mayor */
+  cands.sort((x,y)=> (y.ts-x.ts) || (y.km-x.km));
+  return cands[0];
 }
 
 /* Todas las reservas de un turno (puede haber más de una si el auto se devolvió y se volvió a tomar) */
@@ -2369,7 +2374,8 @@ const listaVehs=(m)=> Object.entries(m||{}).sort((a,b)=>b[1]-a[1])
 function tablaCostos(C){
   const {filas,total,sinAsignar,vehs,diasMes}=C;
   const botonCargo=`<div class="btnrow"><button class="btn ghost tiny" data-nuevocargo>➕ Registrar multa o siniestro</button>
-    <button class="btn ghost tiny" data-limpiarcc>🧹 Borrar todo lo de un centro de costo</button></div>`;
+    <button class="btn ghost tiny" data-limpiarcc>🧹 Borrar todo lo de un centro de costo</button>
+    <button class="btn ghost tiny" data-corregirkm>🔢 Corregir el odómetro de un auto</button></div>`;
   const listaCargos = state.cargos.length
     ? `<div class="rowlist">${state.cargos.map(g=>{ const v=veh(g.vehiculo);
         return `<div class="row"><div class="row-main">
@@ -2422,6 +2428,54 @@ function loQueHayDelCC(cc){
     cargos: uniq(state.cargos.filter(r=>(r.cc||"").toUpperCase()===c)),
     enCatalogo: state.ccs.some(x=>(x.codigo||"").toUpperCase()===c),
   };
+}
+/* Corregir el odómetro cuando alguien cargó un número equivocado */
+function abrirCorregirKm(){
+  if(!soyAdmin()){ toast("Solo un administrador puede hacer esto."); return; }
+  abrirModal(`
+    <div class="pintitle">🔢 Corregir el odómetro</div>
+    <p class="pinsub">Si alguien cargó un kilometraje equivocado, el resto queda obligado a poner un número
+      todavía más alto. Acá se corrige y vuelve a quedar bien para todos.</p>
+    <div class="rowlist">${VEHICULOS.map(v=>{ const u=ultimoKm(v.id);
+      return `<div class="row"><div class="row-main">
+        <div class="row-nm">${v.emoji} ${esc(v.nombre)}</div>
+        <div class="row-meta">Hoy figura en <b>${u?u.km.toLocaleString("es-UY"):"—"} km</b>${
+          u && u.base ? " · valor inicial de la app"
+          : u ? ` · ${esc(primerNombre(u.nombre||""))||"—"}${u.fecha?", "+fechaCorta(u.fecha):""}` : ""}</div></div>
+        <div class="row-acts" style="min-width:150px">
+          <input id="ck_${esc(v.id)}" type="number" inputmode="numeric" placeholder="km reales"
+                 style="width:130px; padding:8px 10px" /></div></div>`;
+    }).join("")}</div>
+    <div class="aviso-box" style="margin-top:12px">Poné el número que marca el tablero <b>ahora</b>.
+      Solo completá el auto que quieras corregir; el otro dejalo vacío.</div>
+    <div class="pinmsg" id="ckMsg"></div>
+    <div class="pinactions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button id="ckOk" class="btn">Guardar</button>
+    </div>`, ()=>{ $("ckOk").addEventListener("click", guardarCorreccionKm); });
+}
+async function guardarCorreccionKm(){
+  const cambios=[];
+  for(const v of VEHICULOS){
+    const el=$("ck_"+v.id); if(!el) continue;
+    const km=parseInt(el.value||"0",10)||0;
+    if(!km) continue;
+    if(km<1000){ $("ckMsg").textContent=`Revisá el número de ${v.nombre}: parece muy bajo.`; return; }
+    cambios.push({v, km});
+  }
+  if(!cambios.length){ $("ckMsg").textContent="Completá al menos un auto."; return; }
+  const detalle=cambios.map(c=>`${c.v.nombre}: ${c.km.toLocaleString("es-UY")} km`).join("\n");
+  if(!confirm(`Vas a fijar el odómetro en:\n\n${detalle}\n\n`
+    + `Las próximas devoluciones tendrán que ser mayores a esos valores. ¿Confirmás?`)) return;
+  for(const c of cambios){
+    try{ await Store.actualizarVehiculo(c.v.id,{
+      id:c.v.id, ultimoKm:c.km, ultimoKmFecha:ymd(new Date()), ultimoKmPor:state.nombre,
+      ultimoKmId:"", ultimoKmTs:ahoraMs(), corregido:true }); }
+    catch(e){ console.error(e); $("ckMsg").textContent="No se pudo guardar. Reintentá."; return; }
+  }
+  cerrarModal();
+  toast(cambios.length===1 ? `${cambios[0].v.nombre}: odómetro en ${cambios[0].km.toLocaleString("es-UY")} km.`
+                           : "Odómetros actualizados.");
 }
 function abrirLimpiarCC(){
   if(!soyAdmin()){ toast("Solo un administrador puede hacer esto."); return; }
@@ -3438,6 +3492,7 @@ document.body.addEventListener("click", e=>{
     copiar(l.join("\n")); return;
   }
   const cl=e.target.closest("[data-confirmarllave]"); if(cl){ confirmarLlave(cl.dataset.confirmarllave); return; }
+  if(e.target.closest("[data-corregirkm]")){ abrirCorregirKm(); return; }
   const lc=e.target.closest("[data-limpiarcc]"); if(lc){ abrirLimpiarCC(); return; }
   const nk=e.target.closest("[data-nuevocargo]"); if(nk){ abrirCargo(); return; }
   const bk=e.target.closest("[data-borrarcargo]"); if(bk){ borrarCargo(bk.dataset.borrarcargo); return; }
