@@ -326,8 +326,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v8.9</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.0</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v9.0 · devolución atrasada: odómetro de esa fecha, no el de hoy
          v8.9 · Valentín González
          v8.8 · 7 personas fuera del listado de Nodum, agregadas a pedido
          v8.7 · Felipe Estavillo y Silvio Martino
@@ -1587,6 +1588,33 @@ const ordenBloque=(bid)=> CONFIG.bloques.findIndex(b=>b.id===bid);
 
 /* Último kilometraje registrado de un vehículo, mirando todo el historial disponible.
    Si se pasa "excluir", ignora esa salida (sirve al corregir una devolución ya hecha). */
+/* Todas las lecturas conocidas del odómetro de un vehículo, con su fecha */
+function lecturasKm(vehId, excluirId){
+  const l=[];
+  const base=(CONFIG.kmInicial||{})[vehId];
+  if(base) l.push({ km:base, fecha:"", base:true });
+  const a=state.autos[vehId];
+  if(a && a.ultimoKm && a.ultimoKmId!==excluirId)
+    l.push({ km:a.ultimoKm, fecha:a.ultimoKmFecha||"", nombre:a.ultimoKmPor||"", corregido:!!a.corregido });
+  const vistos=new Map();
+  [...state.agenda, ...state.pendientes, ...state.mes].forEach(r=>{ if(r && r.id) vistos.set(r.id, r); });
+  vistos.forEach(r=>{
+    if(r.vehiculo!==vehId || !r.kmLlegada || r.id===excluirId) return;
+    l.push({ km:r.kmLlegada, fecha:r.fecha, nombre:r.nombre });
+  });
+  return l;
+}
+/* Contexto de una devolución: entre qué valores tiene que estar su odómetro.
+   Una devolución ATRASADA no se compara con el odómetro de hoy, sino con el
+   que tenía el auto en esa fecha.                                            */
+function contextoKm(r){
+  const l=lecturasKm(r.vehiculo, r.id);
+  const antes   = l.filter(x=>!x.fecha || x.fecha<=r.fecha);
+  const despues = l.filter(x=>x.fecha && x.fecha>r.fecha);
+  const piso = antes.length ? antes.reduce((a,b)=> b.km>a.km?b:a) : null;
+  const techo= despues.length? despues.reduce((a,b)=> b.km<a.km?b:a) : null;
+  return { piso, techo, atrasada: !!techo };
+}
 /* Kilometraje de referencia de un vehículo.
    Gana el registro MÁS RECIENTE, no el más alto: así un número mal tipeado
    se puede corregir y deja de trabar a todo el mundo.                       */
@@ -2576,8 +2604,10 @@ function agruparUsos(datos){
   /* Km de cada salida = odómetro registrado menos el anterior del mismo auto.
      Al retirar no se carga kmSalida, así que se reconstruye con la serie de devoluciones. */
   const previo={};
+  /* Se ordena por la FECHA DE LA SALIDA, no por cuándo se registró:
+     una devolución cargada tarde igual pertenece a su día.            */
   usos.filter(u=>u.kmLlegada>0)
-      .sort((a,b)=>(a.devueltoTs||0)-(b.devueltoTs||0) || (a.fecha<b.fecha?-1:1))
+      .sort((a,b)=> (a.fecha<b.fecha?-1 : a.fecha>b.fecha?1 : (a.devueltoTs||0)-(b.devueltoTs||0)))
       .forEach(u=>{
         const ant = previo[u.vehiculo]!==undefined ? previo[u.vehiculo] : ((CONFIG.kmInicial||{})[u.vehiculo]||0);
         if(ant && u.kmLlegada>ant) u.km = u.kmLlegada-ant;
@@ -3363,17 +3393,24 @@ function abrirDevolucion(id){
   const r=buscarReserva(id); if(!r){ toast("No encontramos esa reserva."); return; }
   if(!puedeGestionar(r)){ toast(`Esa reserva es de ${primerNombre(r.nombre)}. La devolución la registra esa persona o un administrador.`); return; }
   const v=veh(r.vehiculo);
-  const ULTKM=ultimoKm(r.vehiculo, r.id);
+  const ULTKM=ultimoKm(r.vehiculo, r.id), CTXKM=contextoKm(r);
   abrirModal(`
     <div class="pintitle">Devolución · ${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)}</div>
     <p class="pinsub">${fechaLarga(r.fecha)} · ${esc(r.nombre)} · CC ${esc(r.cc||"—")}<br>
       Comprometido: <b>${esc(r.horaDevolucion||horaLimite(r))}</b>${r.demoraHora?` · demora avisada: <b>${esc(r.demoraHora)}</b>`:""}${
       r.combSalida?`<br>Retiró con nafta: <b>${esc(r.combSalida)}</b>`:""}</p>
+    ${CTXKM.atrasada?`<div class="aviso-box">📅 Estás cerrando una salida de una fecha anterior y el auto ya se usó después.
+      Cargá los datos <b>de ese día</b>. El odómetro actual del vehículo no se modifica.</div>`:""}
     <div class="fgrid">
       <div class="frow"><label class="fld">Nafta al devolver *</label><select id="dComb">${nivelOptions(r.combLlegada||"")}</select></div>
       <div class="frow"><label class="fld">Kilometraje al devolver *</label>
-        <input id="dKm" type="number" inputmode="numeric" placeholder="${soyAdmin() && ULTKM?`mayor a ${ULTKM.km}`:"Ej: 45260"}" value="${r.kmLlegada||""}" />
-        ${soyAdmin() && ULTKM
+        <input id="dKm" type="number" inputmode="numeric" placeholder="${
+          CTXKM.atrasada && CTXKM.piso ? `entre ${CTXKM.piso.km} y ${CTXKM.techo.km}`
+          : soyAdmin() && ULTKM ? `mayor a ${ULTKM.km}` : "Ej: 45260"}" value="${r.kmLlegada||""}" />
+        ${CTXKM.atrasada
+          ? `<div class="hint">Poné el kilometraje <b>que marcaba cuando dejaste el auto</b>, no el de hoy${
+              CTXKM.piso?`: entre <b>${CTXKM.piso.km.toLocaleString("es-UY")}</b> y <b>${CTXKM.techo.km.toLocaleString("es-UY")} km</b>`:""}.</div>`
+          : soyAdmin() && ULTKM
           ? `<div class="hint">Último registrado: <b>${ULTKM.km.toLocaleString("es-UY")} km</b> · ${
               ULTKM.base ? "valor inicial de la app" : `${esc(primerNombre(ULTKM.nombre))}, ${fechaCorta(ULTKM.fecha)}`}</div>`
           : `<div class="hint">Copiá el número tal cual figura en el tablero del auto.</div>`}</div>
@@ -3452,21 +3489,27 @@ async function guardarDevolucion(r){
   const imprev=parseInt($("dImprev").value||"0",10)||0, imprevDet=($("dImprevDet").value||"").trim();
   if(!comb){ $("dMsg").textContent="Indicá con cuánta nafta devolvés el auto."; return; }
   if(isNaN(km)||km<=0){ $("dMsg").textContent="El kilometraje al devolver es obligatorio."; return; }
-  const ult=ultimoKm(r.vehiculo, r.id);
-  if(r.kmSalida && km<r.kmSalida && (!ult || r.kmSalida>=ult.km)){
-    $("dMsg").textContent=`El kilometraje no puede ser menor al de salida (${r.kmSalida.toLocaleString("es-UY")}).`; return; }
-  if(ult && km<ult.km){
-    const deQuien = ult.base ? "es el valor inicial cargado en la app"
-                             : `lo registró ${primerNombre(ult.nombre)} el ${fechaCorta(ult.fecha)}`;
+  const CTX=contextoKm(r), piso=CTX.piso, techo=CTX.techo;
+  if(piso && km<piso.km){
+    const deQuien = piso.base ? "es el valor inicial cargado en la app"
+                  : piso.fecha ? `lo registró ${primerNombre(piso.nombre)} el ${fechaCorta(piso.fecha)}`
+                  : "es el último registrado";
     $("dMsg").textContent = soyAdmin()
-      ? `El odómetro no puede bajar: el último registro es ${ult.km.toLocaleString("es-UY")} km (${deQuien}). `
-        + `Revisá el número del tablero.`
-      : `El número tiene que ser mayor a ${ult.km.toLocaleString("es-UY")}. Revisá el tablero del auto.`;
+      ? `El odómetro no puede bajar: la lectura anterior es ${piso.km.toLocaleString("es-UY")} km (${deQuien}).`
+      : `El número tiene que ser mayor a ${piso.km.toLocaleString("es-UY")}. Revisá el tablero del auto.`;
     return;
   }
-  if(ult && km-ult.km>3000 && !confirm(
-      `Estás registrando ${(km-ult.km).toLocaleString("es-UY")} km recorridos desde el último registro (${ult.km.toLocaleString("es-UY")} km). `
-      + `¿Es correcto?`)) return;
+  /* Devolución atrasada: el auto se siguió usando, así que el número tiene que
+     ser MENOR al de la salida siguiente, no mayor al de hoy.                    */
+  if(techo && km>techo.km){
+    $("dMsg").textContent = `Esta salida es del ${fechaCorta(r.fecha)} y después alguien registró `
+      + `${techo.km.toLocaleString("es-UY")} km${techo.fecha?` el ${fechaCorta(techo.fecha)}`:""}. `
+      + `El número de esta devolución tiene que ser menor a ese.`;
+    return;
+  }
+  if(piso && !techo && km-piso.km>3000 && !confirm(
+      `Estás registrando ${(km-piso.km).toLocaleString("es-UY")} km recorridos desde la lectura anterior `
+      + `(${piso.km.toLocaleString("es-UY")} km). ¿Es correcto?`)) return;
   if(serv && !obs){ $("dMsg").textContent="Contá brevemente qué le pasa al auto."; return; }
   if(!hayPeaje){ $("dMsg").textContent="Decinos si hubo peajes o no: hace falta para el costo del proyecto."; return; }
   if(gasto>0 && !pago){ $("dMsg").textContent="Indicá cómo pagaste la nafta (Sisconve, efectivo…)."; return; }
@@ -3485,9 +3528,11 @@ async function guardarDevolucion(r){
       gastoEstac: n===0?estac:0, gastoImprev: n===0?imprev:0 })); n++; }
     catch(e){ console.error(e); }
   }
-  /* queda como referencia permanente para la próxima devolución */
+  /* Queda como referencia para la próxima devolución.
+     Si es una devolución atrasada, NO se toca el odómetro actual del auto:
+     ese número ya lo dejó una salida posterior.                            */
   const prev=ultimoKm(r.vehiculo, r.id);
-  if(!prev || km>=prev.km){
+  if(!CTX.atrasada && (!prev || km>=prev.km)){
     const idRef=(hermanas(r,true)[0]||r).id;
     try{ await Store.actualizarVehiculo(r.vehiculo,{
       id:r.vehiculo, ultimoKm:km, ultimoKmFecha:r.fecha, ultimoKmPor:state.nombre, ultimoKmId:idRef, ultimoKmTs:ts }); }
