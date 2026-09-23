@@ -326,8 +326,11 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.2</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.5</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v9.5 · días salteados: CC y horario por cada salida
+         v9.4 · aviso al elegir días no consecutivos
+         v9.3 · una devolución por salida, no por día
          v9.2 · Verónica Schiavo
          v9.1 · Federica Pereira
          v9.0 · devolución atrasada: odómetro de esa fecha, no el de hoy
@@ -1660,8 +1663,30 @@ function todasLasFilas(){
   return [...m.values()];
 }
 /* Las demás filas de la misma salida (mismo día, auto y persona) */
-const hermanas=(r,soloAbiertas)=> todasLasFilas().filter(x=>
-  x.fecha===r.fecha && x.vehiculo===r.vehiculo && x.ownerUid===r.ownerUid && (!soloAbiertas || !x.devuelto));
+/* Una SALIDA es el tramo de días CONSECUTIVOS con el mismo auto y la misma persona.
+   Tres días seguidos = una sola devolución. Si hay un día de corte en el medio,
+   son dos salidas distintas: ese día el auto quedó disponible para otros.        */
+function diasDelTramo(r){
+  const dias=[...new Set(todasLasFilas()
+    .filter(x=> x.vehiculo===r.vehiculo && x.ownerUid===r.ownerUid && !x.cancelada)
+    .flatMap(x=> diasQueOcupa(x)))].sort();
+  const i=dias.indexOf(r.fecha);
+  if(i<0) return [r.fecha];
+  const seguido=(a,b)=> Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/86400000)===1;
+  let ini=i, fin=i;
+  while(ini>0 && seguido(dias[ini-1], dias[ini])) ini--;
+  while(fin<dias.length-1 && seguido(dias[fin], dias[fin+1])) fin++;
+  return dias.slice(ini, fin+1);
+}
+/* Todas las filas de esa salida (todos sus días y turnos) */
+const hermanas=(r,soloAbiertas)=>{
+  const dias=new Set(diasDelTramo(r));
+  return todasLasFilas().filter(x=>
+    dias.has(x.fecha) && x.vehiculo===r.vehiculo && x.ownerUid===r.ownerUid
+    && !x.cancelada && (!soloAbiertas || !x.devuelto));
+};
+/* Clave para agrupar: identifica la salida completa, no el día suelto */
+const claveSalida=(r)=>{ const d=diasDelTramo(r); return `${d[0]}__${r.vehiculo}__${r.ownerUid}`; };
 
 function ocupacion(vehId){
   const act=bloquesActivos();
@@ -2368,7 +2393,10 @@ function renderAvisoMio(){
 function renderPendientes(){
   const pend=state.pendientes.filter(r=>["pendiente","atrasada"].includes(estadoDevolucion(r)))
     .sort((a,b)=> a.fecha<b.fecha?-1:1);
-  const grupos=[...new Map(pend.map(r=>[`${r.fecha}__${r.vehiculo}__${r.ownerUid}`, r])).values()];
+  const gm=new Map();
+  pend.forEach(r=>{ const k=claveSalida(r);
+    if(!gm.has(k) || r.fecha<gm.get(k).fecha) gm.set(k, r); });
+  const grupos=[...gm.values()];
   $("pendCount").innerHTML = grupos.length ? `<b>${grupos.length}</b> pendiente(s)` : "todo al día ✓";
   if(!grupos.length){ $("pendBody").innerHTML=`<div class="empty">No hay devoluciones pendientes. 👌</div>`; return; }
   $("pendBody").innerHTML = grupos.map(r=>{
@@ -2377,7 +2405,8 @@ function renderPendientes(){
     return `<div class="row ${tarde?"late":"warn"}">
       <div class="row-main">
         <div class="row-nm">${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)} · ${esc(r.nombre)}</div>
-        <div class="row-meta">${fechaLarga(r.fecha)} · comprometido ${esc(horaLimite(r))} · ${tarde?"ATRASADA":"por vencer"} · CC ${esc(r.cc||"—")}${
+        <div class="row-meta">${(function(){const t=diasDelTramo(r);
+          return t.length>1 ? `${fechaCorta(t[0])} al ${fechaLarga(t[t.length-1])} (${t.length} días)` : fechaLarga(r.fecha);})()} · comprometido ${esc(horaLimite(r))} · ${tarde?"ATRASADA":"por vencer"} · CC ${esc(r.cc||"—")}${
           r.demoraHora?` · 🕒 avisó que vuelve ${demoraDeDias(r)?fechaCorta(r.demoraFecha)+" ":""}${esc(r.demoraHora)}`:""}${
           sig?`<br>→ lo espera ${esc(sig.nombre)}, ${fechaLarga(sig.fecha)} ${inicioDe(sig)}`:""}</div>
       </div>
@@ -2900,14 +2929,19 @@ const nivelOptions=(sel)=>`<option value=""${sel?"":" selected"}>Elegí…</opti
 function deudaVehiculo(vehId){
   const hoy=ymd(new Date());
   const l=state.pendientes.filter(r=>r.vehiculo===vehId && fechaLimite(r)<hoy && !r.llaveConfirmada);
-  return [...new Map(l.map(r=>[`${r.fecha}__${r.ownerUid}`, r])).values()]
-    .sort((a,b)=> a.fecha<b.fecha?-1:1);
+  const m=new Map();
+  l.forEach(r=>{ const k=claveSalida(r);
+    if(!m.has(k) || r.fecha<m.get(k).fecha) m.set(k, r); });
+  return [...m.values()].sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
 /* Reservas abiertas (sin devolver) de la persona, agrupadas por día y vehículo */
 function abiertasDe(uid){
   const u=uid||state.uid;
-  return [...new Map(state.agenda.filter(r=>r.ownerUid===u && !r.devuelto)
-    .map(r=>[`${r.fecha}__${r.vehiculo}`, r])).values()].sort((a,b)=> a.fecha<b.fecha?-1:1);
+  const m=new Map();
+  state.agenda.filter(r=>r.ownerUid===u && !r.devuelto && !r.cancelada).forEach(r=>{
+    const k=claveSalida(r);
+    if(!m.has(k) || r.fecha<m.get(k).fecha) m.set(k, r); });
+  return [...m.values()].sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
 /* Días seguidos que quedarían con ese vehículo, sumando lo ya reservado y lo que se quiere agregar */
 function rachaMasLarga(vehId, diasNuevos, uid){
@@ -2951,8 +2985,11 @@ const vehiculosAbiertos=(uid)=> [...new Set(abiertasDe(uid).map(r=>r.vehiculo))]
 function deudasDevolucion(uid){
   const hoy=ymd(new Date());
   const propias=state.pendientes.filter(r=>r.ownerUid===(uid||state.uid) && fechaLimite(r)<hoy);
-  return [...new Map(propias.map(r=>[`${r.fecha}__${r.vehiculo}`, r])).values()]
-    .sort((a,b)=> a.fecha<b.fecha?-1:1);
+  /* una sola deuda por salida, aunque haya durado varios días */
+  const m=new Map();
+  propias.forEach(r=>{ const k=claveSalida(r);
+    if(!m.has(k) || r.fecha<m.get(k).fecha) m.set(k, r); });
+  return [...m.values()].sort((a,b)=> a.fecha<b.fecha?-1:1);
 }
 function avisarDeuda(deudas){
   abrirModal(`
@@ -3103,6 +3140,17 @@ function pedirTelNuevo(){
 }
 const horaSugerida=()=> state.ambos ? CONFIG.devolucionJornada : (bloque(state.bloque).devolucion||"17:00");
 const esExtension=()=> abiertasDe().some(r=>r.vehiculo===state.pending);
+/* Parte una lista de días en tramos de días consecutivos */
+function tramosDe(dias){
+  const d=[...dias].sort(), out=[];
+  d.forEach(f=>{
+    const ult=out.length?out[out.length-1]:null;
+    const seguido = ult && Math.round(
+      (new Date(f+"T12:00:00") - new Date(ult[ult.length-1]+"T12:00:00"))/86400000)===1;
+    if(seguido) ult.push(f); else out.push([f]);
+  });
+  return out;
+}
 function pedirDatosReserva(){
   const v=veh(state.pending), dias=[...state.diasSel].sort();
   if(!dias.length){ toast("Elegí al menos un día."); return; }
@@ -3118,10 +3166,28 @@ function pedirDatosReserva(){
   }
   const bl=bloquesActivos();
   const sig=proximoUso(state.pending, dias[dias.length-1], bl[bl.length-1]);
-  const EXT=esExtension();
+  const EXT=esExtension(), TRAMOS=tramosDe(dias);
   abrirModal(`
     <div class="pintitle">${v.emoji} ${esc(v.nombre)}</div>
     <p class="pinsub">${dias.length} día(s) · ${etiquetaTurno()}<br>${dias.map(fechaLarga).join(" · ")}</p>
+    ${TRAMOS.length<2 ? "" : `<div class="aviso-box">🗓️ Elegiste días <b>no consecutivos</b>: van a ser
+        <b>${TRAMOS.length} salidas separadas</b>, cada una con su propia devolución.
+        Los días del medio el auto queda libre para otros.</div>
+      <div class="frow"><label class="fld">¿Todas para el mismo proyecto? *</label>
+        <div class="opts" id="fMismoCC">
+          <label class="opt sel"><input type="radio" name="fmcc" value="si" checked /><span>Sí, mismo CC y horario</span></label>
+          <label class="opt"><input type="radio" name="fmcc" value="no" /><span>No, cargar cada salida aparte</span></label>
+        </div></div>
+      <div id="fTramosBox" style="display:none">${TRAMOS.map((t,i)=>`
+        <div class="c-tramo" style="border:1px solid var(--line); border-radius:11px; padding:11px 13px; margin-bottom:9px">
+          <div class="lbl2">SALIDA ${i+1} · ${t.length>1?`${fechaLarga(t[0])} al ${fechaLarga(t[t.length-1])} (${t.length} días)`:fechaLarga(t[0])}</div>
+          <div class="fgrid">
+            <div class="frow"><label class="fld">Centro de costo *</label>
+              <input id="ftCC${i}" type="text" list="ccList" placeholder="Ej: II2610" autocomplete="off" /></div>
+            <div class="frow"><label class="fld">¿A qué hora lo devolvés? *</label>
+              <input id="ftHora${i}" type="time" value="${esc(CONFIG.horaDevolucionSugerida||"17:30")}" /></div>
+          </div>
+        </div>`).join("")}</div>`}
     ${soyAdmin() ? `<div class="frow"><label class="fld">Reservar a nombre de</label>
       <select id="fQuien">
         <option value="">Yo · ${esc(state.nombre)}</option>
@@ -3135,13 +3201,15 @@ function pedirDatosReserva(){
       <div class="frow"><label class="fld">Motivo de la extensión *</label>
         <select id="fMotExt"><option value="">Elegí…</option>${CONFIG.motivosExtension.map(m=>`<option>${m}</option>`).join("")}</select></div>`:""}</div>
     ${sig && sig.ownerUid!==state.uid ? `<div class="aviso-box">🤝 Después de tu turno lo usa <b>${esc(sig.nombre)}</b>, ${fechaLarga(sig.fecha)} a las ${inicioDe(sig)}. Tenelo en cuenta al elegir la hora de devolución.</div>`:""}
-    <div class="frow">
-      <label class="fld">Centro de costo (CC) del proyecto *</label>
-      <input id="fCC" type="text" list="ccList" placeholder="Ej: II2610, VT2216, AS2408…" autocomplete="off" />
-      ${ccOptions()}
-      <div class="hint">Si el CC es nuevo, escribilo igual: queda guardado para la próxima.</div>
+    <div id="fCCGlobal">
+      <div class="frow">
+        <label class="fld">Centro de costo (CC) del proyecto *</label>
+        <input id="fCC" type="text" list="ccList" placeholder="Ej: II2610, VT2216, AS2408…" autocomplete="off" />
+        ${ccOptions()}
+        <div class="hint">Si el CC es nuevo, escribilo igual: queda guardado para la próxima.</div>
+      </div>
+      <div class="frow"><label class="fld">¿A qué hora lo devolvés? *</label><input id="fHora" type="time" value="${horaSugerida()}" /></div>
     </div>
-    <div class="frow"><label class="fld">¿A qué hora lo devolvés? *</label><input id="fHora" type="time" value="${horaSugerida()}" /></div>
     <div id="fLibBox">${bloqueLibreta()}</div>
     <div id="fTelBox">${bloqueTel()}</div>
     <div id="fAvisoTercero"></div>
@@ -3155,6 +3223,14 @@ function pedirDatosReserva(){
       <button id="mOk" class="btn">Reservar</button>
     </div>`, (w)=>{
       $("fCC").focus();
+      const mcc=w.querySelector("#fMismoCC");
+      if(mcc) mcc.addEventListener("change", ()=>{
+        const aparte = mcc.querySelector('input[value="no"]').checked;
+        mcc.querySelectorAll(".opt").forEach(o=>o.classList.toggle("sel", o.querySelector("input").checked));
+        w.querySelector("#fTramosBox").style.display = aparte ? "" : "none";
+        const g=w.querySelector("#fCCGlobal"); if(g) g.style.display = aparte ? "none" : "";
+        if(aparte){ const p=w.querySelector("#ftCC0"); if(p) p.focus(); }
+      });
       const q=w.querySelector("#fQuien");
       if(q) q.addEventListener("change", ()=>{
         const otro=!!q.value;
@@ -3184,7 +3260,25 @@ async function guardarReserva(){
     const racha=rachaMasLarga(state.pending, [...state.diasSel]);
     if(racha.dias>CONFIG.maxDiasSeguidos){ const vid=state.pending; cerrarModal(); clearPending(); renderAutos(); avisarMaximoDias(vid, racha); return; }
   }
-  const cc=($("fCC").value||"").trim().toUpperCase();
+  /* Días no consecutivos: puede haber un CC y un horario por salida */
+  const TR=tramosDe([...state.diasSel]);
+  const porSalida = !!(document.querySelector('#fMismoCC input[value="no"]:checked'));
+  const datosTramo=[];
+  if(porSalida){
+    for(let i=0;i<TR.length;i++){
+      const c=(($("ftCC"+i)||{}).value||"").trim().toUpperCase();
+      const h=(($("ftHora"+i)||{}).value||"").trim();
+      const etq = TR[i].length>1 ? `${fechaCorta(TR[i][0])} al ${fechaCorta(TR[i][TR[i].length-1])}` : fechaCorta(TR[i][0]);
+      if(!c){ $("mMsg").textContent=`Falta el centro de costo de la salida del ${etq}.`; return; }
+      if(!h){ $("mMsg").textContent=`Falta la hora de devolución de la salida del ${etq}.`; return; }
+      datosTramo.push({ dias:new Set(TR[i]), cc:c, hora:h });
+    }
+  }
+  const datosDe=(dia)=>{
+    const t=datosTramo.find(x=>x.dias.has(dia));
+    return t || null;
+  };
+  const cc=porSalida ? datosTramo[0].cc : ($("fCC").value||"").trim().toUpperCase();
   if(!cc){ $("mMsg").textContent="El centro de costo es obligatorio."; return; }
   const horaDev=$("fHora").value||"";
   if(!horaDev){ $("mMsg").textContent="Indicá a qué hora devolvés el auto."; return; }
@@ -3227,7 +3321,9 @@ async function guardarReserva(){
       const base=`${dia}__${vehId}__${bid}`;
       let id=base, n=1;
       while(state.agenda.some(x=>x.id===id)){ n++; id=`${base}__${n}`; }
-      const data={ id, fecha:dia, vehiculo:vehId, bloque:bid, cc, horaDevolucion:horaDev,
+      const dt=datosDe(dia);
+      const data={ id, fecha:dia, vehiculo:vehId, bloque:bid,
+        cc: dt?dt.cc:cc, horaDevolucion: dt?dt.hora:horaDev,
         nombre:dueno.nombre, ownerUid:dueno.email, creado:Date.now(),
         cargadaPor: paraOtro ? state.nombre : "",
         combSalida:combS, kmSalida:null, comentarioSalida:obsS, libreta:lib,
@@ -3241,6 +3337,11 @@ async function guardarReserva(){
     }
     if(fallo){ for(const id of creados){ try{ await Store.cancelar(id); }catch(e){} } no++; }
     else { ok++; creadas.push(primera); }
+  }
+  for(const t of datosTramo){
+    if(t.cc===cc) continue;
+    try{ const e2=state.ccs.find(c=>c.codigo===t.cc);
+      await Store.addCC(t.cc, { codigo:t.cc, usos:((e2&&e2.usos)||0)+1, ultimoUso:Date.now(), ultimaPersona:state.nombre }); }catch(e){}
   }
   try{ const ex=state.ccs.find(c=>c.codigo===cc);
     await Store.addCC(cc, { codigo:cc, usos:((ex&&ex.usos)||0)+ok, ultimoUso:Date.now(), ultimaPersona:state.nombre }); }catch(e){}
@@ -3398,11 +3499,17 @@ function abrirDevolucion(id){
   if(!puedeGestionar(r)){ toast(`Esa reserva es de ${primerNombre(r.nombre)}. La devolución la registra esa persona o un administrador.`); return; }
   const v=veh(r.vehiculo);
   const ULTKM=ultimoKm(r.vehiculo, r.id), CTXKM=contextoKm(r);
+  const TRAMO=diasDelTramo(r);
+  const RANGO = TRAMO.length>1
+    ? `${fechaLarga(TRAMO[0])} al ${fechaLarga(TRAMO[TRAMO.length-1])} · <b>${TRAMO.length} días</b>`
+    : fechaLarga(r.fecha);
   abrirModal(`
     <div class="pintitle">Devolución · ${v?v.emoji:"🚗"} ${esc(v?v.nombre:r.vehiculo)}</div>
-    <p class="pinsub">${fechaLarga(r.fecha)} · ${esc(r.nombre)} · CC ${esc(r.cc||"—")}<br>
+    <p class="pinsub">${RANGO} · ${esc(r.nombre)} · CC ${esc(r.cc||"—")}<br>
       Comprometido: <b>${esc(r.horaDevolucion||horaLimite(r))}</b>${r.demoraHora?` · demora avisada: <b>${esc(r.demoraHora)}</b>`:""}${
       r.combSalida?`<br>Retiró con nafta: <b>${esc(r.combSalida)}</b>`:""}</p>
+    ${TRAMO.length>1?`<div class="aviso-box">🗓️ Esta salida abarca <b>${TRAMO.length} días seguidos</b>.
+      Se cierra toda junta: cargá el kilometraje y los gastos <b>de todo el período</b>.</div>`:""}
     ${CTXKM.atrasada?`<div class="aviso-box">📅 Estás cerrando una salida de una fecha anterior y el auto ya se usó después.
       Cargá los datos <b>de ese día</b>. El odómetro actual del vehículo no se modifica.</div>`:""}
     <div class="fgrid">
@@ -3523,12 +3630,15 @@ async function guardarDevolucion(r){
   if(imprev>0 && !imprevDet){ $("dMsg").textContent="Aclará de qué fue el gasto imprevisto."; return; }
   const ts=ahoraMs();
   const base={ devuelto:true, devueltoTs:ts, devueltoPor:state.nombre,
-    combLlegada:comb, kmLlegada:km, comentarioLlegada:obs, requiereService:serv,
+    combLlegada:comb, comentarioLlegada:obs, requiereService:serv,
     sinPeaje: hayPeaje==="no", sinEstac: hayEstac==="no", detalleImprev:imprevDet, pagoNafta: gasto>0?pago:"" };
   let n=0;
-  for(const ex of hermanas(r, true)){          // todos los turnos de esa salida, sin devolver
-    // el gasto se guarda una sola vez para no duplicar totales
-    try{ await Store.actualizar(ex.id, Object.assign({}, base, { gastoNafta: n===0?gasto:0, gastoPeaje: n===0?peaje:0,
+  /* Una salida puede abarcar varios días y turnos: se cierran todas sus filas,
+     pero el kilometraje y los gastos se guardan UNA sola vez, en la primera,
+     para no duplicar totales ni repetir el odómetro en el reporte.            */
+  for(const ex of hermanas(r, true)){
+    try{ await Store.actualizar(ex.id, Object.assign({}, base, { kmLlegada: n===0?km:null,
+      gastoNafta: n===0?gasto:0, gastoPeaje: n===0?peaje:0,
       gastoEstac: n===0?estac:0, gastoImprev: n===0?imprev:0 })); n++; }
     catch(e){ console.error(e); }
   }
