@@ -326,8 +326,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.6</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.8</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v9.8 · nivel del estacionamiento al devolver
          v9.6 · una salida repartida entre dos centros de costo
          v9.5 · días salteados: CC y horario por cada salida
          v9.4 · aviso al elegir días no consecutivos
@@ -1506,6 +1507,8 @@ const CONFIG = {
        Es distinto del estacionamiento suelto que carga cada persona al devolver.     */
     estacionamientoMensual: 14510,
   },
+  /* Niveles del estacionamiento donde se deja el auto */
+  nivelesEstacionamiento: [4,5,6,7,8,9,10],
   /* Cómo se pagó la carga de combustible */
   formasPagoNafta: ["Sisconve", "Efectivo", "Tarjeta de la empresa", "Otro"],
   /* Cargos que solo puede registrar un administrador */
@@ -2311,6 +2314,8 @@ function renderAutos(){
     let flag="";
     if(trabado.length) flag=`<span class="auto-flag">⏰ sin devolver · ${esc(primerNombre(trabado[0].nombre))}, ${fechaCorta(trabado[0].fecha)}</span>`;
     else if(confirmada && cls==="libre") flag=`<span class="auto-flag">🔑 llave confirmada por ${esc(primerNombre(confirmada.llaveConfirmadaPor||""))}</span>`;
+    else if(cls==="libre"){ const niv=ultimoNivel(v.id);
+      if(niv) flag=`<span class="auto-flag">🅿️ estacionado en el nivel ${esc(niv)}</span>`; }
     else if(dem) flag=`<span class="auto-flag">🕒 vuelve ${demoraDeDias(dem)?fechaCorta(dem.demoraFecha)+" ":"~"}${esc(dem.demoraHora)} (${esc(primerNombre(dem.nombre))})</span>`;
     else if(atras) flag=`<span class="auto-flag">⏰ sin devolver · ${esc(primerNombre(atras.nombre))}, ${fechaCorta(atras.fecha)}</span>`;
     return `<button class="auto ${cls}" data-veh="${v.id}" ${dis}>
@@ -2339,6 +2344,7 @@ function renderDia(){
     if(r.demoraHora && !dev) tags.push(`<span class="tag demora">🕒 ${demoraDeDias(r)?`vuelve ${fechaCorta(r.demoraFecha)} ${esc(r.demoraHora)}`:"demora avisada"} · ${esc(r.demoraMotivo||"")}</span>`);
     if(dev){
       tags.push(`<span class="tag ok">✓ devuelto el ${r.devueltoTs?esc(sellaFechaHora(r.devueltoTs)):"—"}</span>`);
+      if(r.nivelEstac) tags.push(`<span class="tag">🅿️ nivel ${esc(r.nivelEstac)}</span>`);
       const gasto=g.reduce((s,x)=>s+(x.gastoNafta||0),0);
       const pg=g.find(x=>x.pagoNafta);
       if(gasto) tags.push(`<span class="tag nafta">⛽ ${moneda(gasto)}${pg?` · ${esc(pg.pagoNafta)}`:""}</span>`);
@@ -2715,6 +2721,13 @@ function calcularCostos(usos, cargos){
     estac:a.estac+f.estac, imprev:a.imprev+f.imprev, cargos:a.cargos+f.cargos, total:a.total+f.total}),
     {dias:0,alq:0,fijoEstac:0,nafta:0,peaje:0,estac:0,imprev:0,cargos:0,total:0});
   return { filas, total, sinAsignar, vehs, diasMes };
+}
+/* Nivel donde quedó estacionado el auto en su última devolución */
+function ultimoNivel(vehId){
+  const l=[...state.agenda, ...state.pendientes, ...state.mes]
+    .filter(r=>r.vehiculo===vehId && r.devuelto && r.nivelEstac)
+    .sort((a,b)=>(b.devueltoTs||0)-(a.devueltoTs||0));
+  return l.length ? l[0].nivelEstac : "";
 }
 const cortoVeh=(id)=>{ const v=veh(id); if(!v) return id;
   return `${v.emoji} ${v.nombre.replace(/^Chevrolet\s+/i,"").replace(/^Camioneta\s+/i,"")}`; };
@@ -3587,6 +3600,10 @@ function abrirDevolucion(id){
       Cargá los datos <b>de ese día</b>. El odómetro actual del vehículo no se modifica.</div>`:""}
     <div class="fgrid">
       <div class="frow"><label class="fld">Nafta al devolver *</label><select id="dComb">${nivelOptions(r.combLlegada||"")}</select></div>
+      <div class="frow"><label class="fld">¿En qué nivel de estacionamiento lo dejaste? *</label>
+        <select id="dNivel"><option value="">Elegí…</option>${CONFIG.nivelesEstacionamiento.map(n=>
+          `<option value="${n}"${String(r.nivelEstac)===String(n)?" selected":""}>Nivel ${n}</option>`).join("")}</select>
+        <div class="hint">Para que la próxima persona sepa dónde encontrarlo.</div></div>
       <div class="frow"><label class="fld">Kilometraje al devolver *</label>
         <input id="dKm" type="number" inputmode="numeric" placeholder="${
           CTXKM.atrasada && CTXKM.piso ? `entre ${CTXKM.piso.km} y ${CTXKM.techo.km}`
@@ -3678,6 +3695,8 @@ async function guardarDevolucion(r){
   const gasto=parseInt($("dGasto").value||"0",10)||0, serv=$("dServ").value==="si", obs=($("dObs").value||"").trim();
   const pago=$("dPago")?($("dPago").value||""):"";
   const hayPeaje=$("dHayPeaje").value||"", peaje=parseInt($("dPeaje").value||"0",10)||0;
+  const nivel=($("dNivel")||{}).value||"";
+  if(!nivel){ $("dMsg").textContent="Indicá en qué nivel del estacionamiento dejaste el auto."; return; }
   const hayEstac=$("dHayEstac").value||"", estac=parseInt($("dEstac").value||"0",10)||0;
   const imprev=parseInt($("dImprev").value||"0",10)||0, imprevDet=($("dImprevDet").value||"").trim();
   if(!comb){ $("dMsg").textContent="Indicá con cuánta nafta devolvés el auto."; return; }
@@ -3717,7 +3736,7 @@ async function guardarDevolucion(r){
     ccNafta:  ($("dCCNafta") ||{}).value || "",
     ccPeaje:  ($("dCCPeaje") ||{}).value || "",
     ccEstac:  ($("dCCEstac") ||{}).value || "",
-    ccImprev: ($("dCCImprev")||{}).value || "" };
+    ccImprev: ($("dCCImprev")||{}).value || "", nivelEstac: nivel };
   let n=0;
   /* Una salida puede abarcar varios días y turnos: se cierran todas sus filas,
      pero el kilometraje y los gastos se guardan UNA sola vez, en la primera,
@@ -3760,6 +3779,8 @@ function verDetalle(id){
         r.devueltoPor?`<br>Registró: ${esc(r.devueltoPor)}`:""}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Gastos</div><div class="row-meta">Nafta: retiró ${esc(r.combSalida||"—")} → devolvió ${esc(r.combLlegada||"—")}${
   r.gastoNafta?` · cargó ${moneda(r.gastoNafta)}${r.pagoNafta?` (${esc(r.pagoNafta)})`:""}`:""}<br>Peajes: ${r.sinPeaje?"sin peajes (ciudad)":(r.gastoPeaje?moneda(r.gastoPeaje):"—")}</div></div></div>
+      ${r.nivelEstac?`<div class="row"><div class="row-main"><div class="row-nm">Dónde quedó</div>
+        <div class="row-meta">Estacionamiento, nivel ${esc(r.nivelEstac)}</div></div></div>`:""}
       <div class="row"><div class="row-main"><div class="row-nm">Odómetro</div><div class="row-meta">${r.kmSalida||"—"} → ${r.kmLlegada||"—"}${(r.kmSalida&&r.kmLlegada)?` (${r.kmLlegada-r.kmSalida} km)`:""}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Observaciones</div><div class="row-meta">Salida: ${esc(r.comentarioSalida||"—")}<br>Devolución: ${esc(r.comentarioLlegada||"—")}</div></div></div>
       ${r.requiereService?`<div class="row late"><div class="row-main"><div class="row-nm">🔧 Requiere service</div><div class="row-meta">${esc(r.comentarioLlegada||"")}</div></div></div>`:""}
@@ -3825,7 +3846,7 @@ async function exportarExcel(){
   /* ── Hoja 1: usos del mes ── */
   const cab=["Fecha","Vehículo","Matrícula","Persona","Libreta al día","Turno","Centro de costo",
     "Hora comprometida","Vuelve el (demora)","Demora avisada","Devuelto","En hora","Km al devolver",
-    "Nafta","Pago nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto","Cargada por"];
+    "Nafta","Pago nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto","Nivel estac.","Cargada por"];
   if(admin) cab.push("Alquiler imputado","Costo total del uso");
   cab.push("Requiere service","Obs. al retirar","Obs. al devolver");
   /* "Cargada por" queda al final de los gastos, antes de los datos de service */
@@ -3842,12 +3863,13 @@ async function exportarExcel(){
       u.devueltoTs? sellaFechaHora(u.devueltoTs) : "sin registrar",
       u.devueltoTs ? (u.devueltoTs<=lim+5*60000?"Sí":"No") : "",
       u.kmLlegada||"",
-      u.gastoNafta||0, u.pagoNafta||"", u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"", u.cargadaPor||"" ];
+      u.gastoNafta||0, u.pagoNafta||"", u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"",
+      u.nivelEstac?("Nivel "+u.nivelEstac):"", u.cargadaPor||"" ];
     if(admin) f.push(Math.round(alq), Math.round(alq+gastos));
     f.push(u.requiereService?"Sí":"No", u.comentarioSalida||"", u.comentarioLlegada||"");
     filas.push(f);
   });
-  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,16,10,14,12,26,20];
+  const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,16,10,14,12,26,13,20];
   if(admin) anchos.push(15,16);
   anchos.push(14,34,34);
   const ws1=hojaConAnchos(X, filas, anchos, [0]);
