@@ -326,8 +326,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.5</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v9.6</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v9.6 · una salida repartida entre dos centros de costo
          v9.5 · días salteados: CC y horario por cada salida
          v9.4 · aviso al elegir días no consecutivos
          v9.3 · una devolución por salida, no por día
@@ -2650,6 +2651,16 @@ function agruparUsos(datos){
 }
 
 /* ════════ COSTOS POR CENTRO DE COSTO (solo admin) ════════ */
+/* Centros de costo de una salida, con su porcentaje.
+   Si no hay reparto, es uno solo al 100%.                       */
+function ccsDe(r){
+  const l=(r && r.ccs && r.ccs.length) ? r.ccs : [{cc:(r&&r.cc)||"—", pct:100}];
+  const suma=l.reduce((a,x)=>a+(x.pct||0),0) || 100;
+  return l.map(x=>({ cc:(x.cc||"—").toUpperCase(), pct:(x.pct||0)*100/suma }));
+}
+/* A qué CC va un gasto puntual: el indicado al devolver, o el principal */
+const ccGasto=(r, campo)=> ((r && r[campo]) || (r && r.cc) || "—").toUpperCase();
+
 function calcularCostos(usos, cargos){
   const [ay,am]=state.statsMes.split("-").map(Number);
   const diasMes=new Date(ay,am,0).getDate();
@@ -2661,13 +2672,25 @@ function calcularCostos(usos, cargos){
   usos.forEach(u=>{
     if(!porVeh[u.vehiculo]) porVeh[u.vehiculo]={dias:0, ccs:{}};
     porVeh[u.vehiculo].dias++;
-    const cc=u.cc||"—";
-    porVeh[u.vehiculo].ccs[cc]=(porVeh[u.vehiculo].ccs[cc]||0)+1;
-    porCC[cc]=porCC[cc]||nuevoCC();
-    const c=porCC[cc];
-    c.dias++; c.nafta+=(u.gastoNafta||0); c.peaje+=(u.gastoPeaje||0);
-    c.estac+=(u.gastoEstac||0); c.imprev+=(u.gastoImprev||0);
-    c.vehs[u.vehiculo]=(c.vehs[u.vehiculo]||0)+1;
+    /* el día se reparte entre los CC de la salida según su porcentaje */
+    ccsDe(u).forEach(({cc,pct})=>{
+      const parte=pct/100;
+      porVeh[u.vehiculo].ccs[cc]=(porVeh[u.vehiculo].ccs[cc]||0)+parte;
+      porCC[cc]=porCC[cc]||nuevoCC();
+      porCC[cc].dias+=parte;
+      porCC[cc].vehs[u.vehiculo]=(porCC[cc].vehs[u.vehiculo]||0)+parte;
+    });
+    /* cada gasto va al CC que se indicó al devolver */
+    const asignar=(campo,monto,destino)=>{
+      if(!monto) return;
+      const cc=ccGasto(u,campo);
+      porCC[cc]=porCC[cc]||nuevoCC();
+      porCC[cc][destino]+=monto;
+    };
+    asignar("ccNafta",  u.gastoNafta||0,  "nafta");
+    asignar("ccPeaje",  u.gastoPeaje||0,  "peaje");
+    asignar("ccEstac",  u.gastoEstac||0,  "estac");
+    asignar("ccImprev", u.gastoImprev||0, "imprev");
   });
   /* El abono mensual de cada auto se reparte entre los CC según cuántos días lo usó cada uno */
   let sinAsignar=0; const vehs=[];
@@ -3208,6 +3231,18 @@ function pedirDatosReserva(){
         ${ccOptions()}
         <div class="hint">Si el CC es nuevo, escribilo igual: queda guardado para la próxima.</div>
       </div>
+      <div class="frow">
+        <label class="opt" style="max-width:340px"><input type="checkbox" id="fDosCC" /><span>El viaje se reparte entre dos proyectos</span></label>
+      </div>
+      <div id="fCC2Box" style="display:none">
+        <div class="fgrid">
+          <div class="frow"><label class="fld">Segundo centro de costo *</label>
+            <input id="fCC2" type="text" list="ccList" placeholder="Ej: AS2408" autocomplete="off" /></div>
+          <div class="frow"><label class="fld">¿Qué parte le toca al primero? *</label>
+            <select id="fPct">${[90,80,75,70,60,50,40,30,25,20,10].map(n=>`<option value="${n}"${n===50?" selected":""}>${n}% / ${100-n}%</option>`).join("")}</select></div>
+        </div>
+        <div class="hint" id="fPctHint"></div>
+      </div>
       <div class="frow"><label class="fld">¿A qué hora lo devolvés? *</label><input id="fHora" type="time" value="${horaSugerida()}" /></div>
     </div>
     <div id="fLibBox">${bloqueLibreta()}</div>
@@ -3223,6 +3258,24 @@ function pedirDatosReserva(){
       <button id="mOk" class="btn">Reservar</button>
     </div>`, (w)=>{
       $("fCC").focus();
+      const dos=w.querySelector("#fDosCC");
+      const pintarPct=()=>{
+        const a=(w.querySelector("#fCC")||{}).value||"primero", b=(w.querySelector("#fCC2")||{}).value||"segundo";
+        const n=parseInt((w.querySelector("#fPct")||{}).value||"50",10);
+        const h=w.querySelector("#fPctHint");
+        if(h) h.innerHTML=`El costo del día se imputa <b>${n}%</b> a ${esc(a.toUpperCase())} y <b>${100-n}%</b> a ${esc(b.toUpperCase())}.
+          Los gastos (nafta, peajes, estacionamiento) los asignás a uno u otro al registrar la devolución.`;
+      };
+      if(dos){
+        dos.addEventListener("change", ()=>{
+          w.querySelector("#fCC2Box").style.display = dos.checked ? "" : "none";
+          dos.closest(".opt").classList.toggle("sel", dos.checked);
+          if(dos.checked){ pintarPct(); w.querySelector("#fCC2").focus(); }
+        });
+        ["#fCC","#fCC2","#fPct"].forEach(sel=>{ const el=w.querySelector(sel);
+          if(el) el.addEventListener("input", pintarPct); });
+        const pc=w.querySelector("#fPct"); if(pc) pc.addEventListener("change", pintarPct);
+      }
       const mcc=w.querySelector("#fMismoCC");
       if(mcc) mcc.addEventListener("change", ()=>{
         const aparte = mcc.querySelector('input[value="no"]').checked;
@@ -3279,6 +3332,15 @@ async function guardarReserva(){
     return t || null;
   };
   const cc=porSalida ? datosTramo[0].cc : ($("fCC").value||"").trim().toUpperCase();
+  /* Reparto entre dos proyectos */
+  let repartoCC=null;
+  if($("fDosCC") && $("fDosCC").checked){
+    const cc2=($("fCC2").value||"").trim().toUpperCase();
+    const pct=parseInt($("fPct").value||"50",10);
+    if(!cc2){ $("mMsg").textContent="Escribí el segundo centro de costo."; return; }
+    if(cc2===cc){ $("mMsg").textContent="Los dos centros de costo son el mismo."; return; }
+    repartoCC=[{cc, pct}, {cc:cc2, pct:100-pct}];
+  }
   if(!cc){ $("mMsg").textContent="El centro de costo es obligatorio."; return; }
   const horaDev=$("fHora").value||"";
   if(!horaDev){ $("mMsg").textContent="Indicá a qué hora devolvés el auto."; return; }
@@ -3323,7 +3385,8 @@ async function guardarReserva(){
       while(state.agenda.some(x=>x.id===id)){ n++; id=`${base}__${n}`; }
       const dt=datosDe(dia);
       const data={ id, fecha:dia, vehiculo:vehId, bloque:bid,
-        cc: dt?dt.cc:cc, horaDevolucion: dt?dt.hora:horaDev,
+        cc: dt?dt.cc:cc, ccs: (!dt && repartoCC) ? repartoCC : null,
+        horaDevolucion: dt?dt.hora:horaDev,
         nombre:dueno.nombre, ownerUid:dueno.email, creado:Date.now(),
         cargadaPor: paraOtro ? state.nombre : "",
         combSalida:combS, kmSalida:null, comentarioSalida:obsS, libreta:lib,
@@ -3337,6 +3400,10 @@ async function guardarReserva(){
     }
     if(fallo){ for(const id of creados){ try{ await Store.cancelar(id); }catch(e){} } no++; }
     else { ok++; creadas.push(primera); }
+  }
+  if(repartoCC){
+    const c2=repartoCC[1].cc, e2=state.ccs.find(c=>c.codigo===c2);
+    try{ await Store.addCC(c2,{ codigo:c2, usos:((e2&&e2.usos)||0)+1, ultimoUso:Date.now(), ultimaPersona:state.nombre }); }catch(e){}
   }
   for(const t of datosTramo){
     if(t.cc===cc) continue;
@@ -3500,6 +3567,10 @@ function abrirDevolucion(id){
   const v=veh(r.vehiculo);
   const ULTKM=ultimoKm(r.vehiculo, r.id), CTXKM=contextoKm(r);
   const TRAMO=diasDelTramo(r);
+  const CCS=ccsDe(r), DOSCC=CCS.length>1;
+  const selCC=(id,val)=> DOSCC
+    ? `<select id="${id}" style="max-width:150px">${CCS.map(x=>`<option value="${esc(x.cc)}"${(val||CCS[0].cc)===x.cc?" selected":""}>${esc(x.cc)}</option>`).join("")}</select>`
+    : "";
   const RANGO = TRAMO.length>1
     ? `${fechaLarga(TRAMO[0])} al ${fechaLarga(TRAMO[TRAMO.length-1])} · <b>${TRAMO.length} días</b>`
     : fechaLarga(r.fecha);
@@ -3508,6 +3579,8 @@ function abrirDevolucion(id){
     <p class="pinsub">${RANGO} · ${esc(r.nombre)} · CC ${esc(r.cc||"—")}<br>
       Comprometido: <b>${esc(r.horaDevolucion||horaLimite(r))}</b>${r.demoraHora?` · demora avisada: <b>${esc(r.demoraHora)}</b>`:""}${
       r.combSalida?`<br>Retiró con nafta: <b>${esc(r.combSalida)}</b>`:""}</p>
+    ${DOSCC?`<div class="aviso-box">💼 Esta salida se reparte entre <b>${CCS.map(x=>`${esc(x.cc)} (${Math.round(x.pct)}%)`).join("</b> y <b>")}</b>.
+      Indicá a qué proyecto va cada gasto.</div>`:""}
     ${TRAMO.length>1?`<div class="aviso-box">🗓️ Esta salida abarca <b>${TRAMO.length} días seguidos</b>.
       Se cierra toda junta: cargá el kilometraje y los gastos <b>de todo el período</b>.</div>`:""}
     ${CTXKM.atrasada?`<div class="aviso-box">📅 Estás cerrando una salida de una fecha anterior y el auto ya se usó después.
@@ -3529,6 +3602,8 @@ function abrirDevolucion(id){
     <div class="fgrid">
       <div class="frow"><label class="fld">Gasto en nafta (${esc(CONFIG.costos.moneda)})</label>
         <input id="dGasto" type="number" inputmode="numeric" min="0" placeholder="0 si no cargaste" value="${r.gastoNafta||""}" /></div>
+      ${DOSCC?`<div class="frow" id="dCCNaftaBox" style="${r.gastoNafta?"":"display:none"}">
+        <label class="fld">¿A qué proyecto va la nafta? *</label>${selCC("dCCNafta", r.ccNafta)}</div>`:""}
       <div class="frow" id="dPagoBox" style="${r.gastoNafta?"":"display:none"}">
         <label class="fld">¿Cómo la pagaste? *</label>
         <select id="dPago"><option value="">Elegí…</option>${CONFIG.formasPagoNafta.map(f=>`<option${f===r.pagoNafta?" selected":""}>${f}</option>`).join("")}</select></div>
@@ -3543,7 +3618,8 @@ function abrirDevolucion(id){
       <div class="frow" id="dEstacBox" style="${r.gastoEstac?"":"display:none"}">
         <label class="fld">Total de estacionamiento (${esc(CONFIG.costos.moneda)})</label>
         <input id="dEstac" type="number" inputmode="numeric" min="0" placeholder="Ej: 180" value="${r.gastoEstac||""}" /></div>
-      <div class="frow"></div>
+      ${DOSCC?`<div class="frow" id="dCCEstacBox" style="${r.gastoEstac?"":"display:none"}">
+        <label class="fld">¿A qué proyecto?</label>${selCC("dCCEstac", r.ccEstac)}</div>`:`<div class="frow"></div>`}
     </div>
     <div class="fgrid">
       <div class="frow"><label class="fld">¿Pagaste peajes? *</label>
@@ -3553,14 +3629,17 @@ function abrirDevolucion(id){
           <option value="si"${r.gastoPeaje?" selected":""}>Telepeaje</option>
         </select></div>
       <div class="frow" id="dPeajeBox" style="${r.gastoPeaje?"":"display:none"}">
-        <label class="fld">Total de peajes (${esc(CONFIG.costos.moneda)})</label>
+        <label class="fld">Total de peajes (${esc(CONFIG.costos.moneda)})${DOSCC?" *":""}</label>
         <input id="dPeaje" type="number" inputmode="numeric" min="0" placeholder="Ej: 340" value="${r.gastoPeaje||""}" /></div>
+      ${DOSCC?`<div class="frow" id="dCCPeajeBox" style="${r.gastoPeaje?"":"display:none"}">
+        <label class="fld">¿A qué proyecto?</label>${selCC("dCCPeaje", r.ccPeaje)}</div>`:""}
     </div>
     <div class="fgrid">
       <div class="frow"><label class="fld">Gasto imprevisto (${esc(CONFIG.costos.moneda)})</label>
         <input id="dImprev" type="number" inputmode="numeric" min="0" placeholder="0 si no hubo" value="${r.gastoImprev||""}" /></div>
       <div class="frow"><label class="fld">¿De qué fue?</label>
         <input id="dImprevDet" type="text" placeholder="Ej: auxilio mecánico, grúa, cubierta" value="${esc(r.detalleImprev||"")}" /></div>
+      ${DOSCC?`<div class="frow"><label class="fld">¿A qué proyecto?</label>${selCC("dCCImprev", r.ccImprev)}</div>`:""}
     </div>
     <div class="frow"><label class="fld">¿Necesita service o arreglo?</label>
       <select id="dServ"><option value="no">No, está bien</option><option value="si"${r.requiereService?" selected":""}>Sí, hay que atenderlo</option></select></div>
@@ -3576,15 +3655,18 @@ function abrirDevolucion(id){
       $("dHayPeaje").addEventListener("change", (ev)=>{
         const si=ev.target.value==="si";
         $("dPeajeBox").style.display = si ? "" : "none";
+        if($("dCCPeajeBox")) $("dCCPeajeBox").style.display = si ? "" : "none";
         if(!si) $("dPeaje").value=""; else $("dPeaje").focus();
       });
       const verPago=()=>{ const hay=(parseInt($("dGasto").value||"0",10)||0)>0;
         $("dPagoBox").style.display = hay ? "" : "none";
+        if($("dCCNaftaBox")) $("dCCNaftaBox").style.display = hay ? "" : "none";
         if(!hay) $("dPago").value=""; };
       $("dGasto").addEventListener("input", verPago);
       $("dHayEstac").addEventListener("change", (ev)=>{
         const si=ev.target.value==="si";
         $("dEstacBox").style.display = si ? "" : "none";
+        if($("dCCEstacBox")) $("dCCEstacBox").style.display = si ? "" : "none";
         if(!si) $("dEstac").value=""; else $("dEstac").focus();
       });
       $("dOk").addEventListener("click", ()=>guardarDevolucion(r));
@@ -3631,7 +3713,11 @@ async function guardarDevolucion(r){
   const ts=ahoraMs();
   const base={ devuelto:true, devueltoTs:ts, devueltoPor:state.nombre,
     combLlegada:comb, comentarioLlegada:obs, requiereService:serv,
-    sinPeaje: hayPeaje==="no", sinEstac: hayEstac==="no", detalleImprev:imprevDet, pagoNafta: gasto>0?pago:"" };
+    sinPeaje: hayPeaje==="no", sinEstac: hayEstac==="no", detalleImprev:imprevDet, pagoNafta: gasto>0?pago:"",
+    ccNafta:  ($("dCCNafta") ||{}).value || "",
+    ccPeaje:  ($("dCCPeaje") ||{}).value || "",
+    ccEstac:  ($("dCCEstac") ||{}).value || "",
+    ccImprev: ($("dCCImprev")||{}).value || "" };
   let n=0;
   /* Una salida puede abarcar varios días y turnos: se cierran todas sus filas,
      pero el kilometraje y los gastos se guardan UNA sola vez, en la primera,
