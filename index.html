@@ -326,8 +326,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v10.1</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v10.2</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v10.2 · PIN obligatorio aunque ya haya confirmado sus datos (usuario sin pinHash = nuevo)
          v10.1 · Mauro Bruzzone
          v10.0 · Eugenio Regules
          v9.9 · Nicolás Gremminger
@@ -565,7 +566,6 @@ const PERSONAS = [
   { nombre:"Carolina Alberro",          email:"calberro@csi-ing.com", tel:"", verificar:true },
   { nombre:"Carolina Martinez",         email:"cmartinez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Carolina Pereira",          email:"cpereira@csi-ing.com", tel:"", verificar:true },
-   { nombre:"Cecilia Ceiter",           email:"cceiter@csi-ing.com", tel:"", verificar:true },
   { nombre:"Cecilia Garcia",            email:"cgarcia@csi-ing.com", tel:"", verificar:true },
   { nombre:"Cecilia Iriarte",           email:"ciriarte@csi-ing.com", tel:"" },
   { nombre:"Cecilia Karina",            email:"ckarina@csi-ing.com", tel:"", verificar:true },
@@ -931,7 +931,6 @@ const PERSONAS = [
   { nombre:"Juan Caballero",            email:"jcaballero@csi-ing.com", tel:"", verificar:true },
   { nombre:"Juan Catepon",              email:"jcatepon@csi-ing.com", tel:"", verificar:true },
   { nombre:"Juan Costa",                email:"jcosta@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Juan Manuel Costa",         email:"jmcostaf@csi-ing.com", tel:"", verificar:true },
   { nombre:"Juan Diaz",                 email:"jdiaz@csi-ing.com", tel:"", verificar:true },
   { nombre:"Juan Etcheverry",           email:"jetcheverry@csi-ing.com", tel:"", verificar:true },
   { nombre:"Juan Fagundez",             email:"jfagundez@csi-ing.com", tel:"", verificar:true },
@@ -991,7 +990,7 @@ const PERSONAS = [
   { nombre:"Lorena Dorta",              email:"ldorta@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lorena Leone",              email:"lleone@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lucas Alvarez",             email:"lalvarez@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Lucas Levrini",             email:"llevrini@csi-ing.com", tel:"", verificar:true },
+  { nombre:"Lucas Levin",               email:"llevin@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lucas Padilla",             email:"lpadilla@csi-ing.com", tel:"" },
   { nombre:"Lucas Tutaglio",            email:"ltutaglio@csi-ing.com", tel:"", verificar:true },
   { nombre:"Lucia Barata",              email:"lbarata@csi-ing.com", tel:"", verificar:true },
@@ -1239,7 +1238,6 @@ const PERSONAS = [
   { nombre:"Pablo Curbelo",             email:"pcurbelo@csi-ing.com", tel:"" },
   { nombre:"Pablo Dos",                 email:"pdos@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pablo Fabian",              email:"pfabian@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Pablo Fernandez Santiago",  email:"rguerrero@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pablo Freijanes",           email:"pfreijanes@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pablo Gordano",             email:"pgordano@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pablo Mallet",              email:"pmallet@csi-ing.com", tel:"", verificar:true },
@@ -1269,7 +1267,6 @@ const PERSONAS = [
   { nombre:"Pedro Boccardi",            email:"pboccardi@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pedro Fernandez",           email:"pfernandez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pedro Lenzi",               email:"plenzi@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Pedro Rega",                email:"prega@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pepelescov Michael",        email:"pmichael@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pilar Galan",               email:"pgalan@csi-ing.com", tel:"", verificar:true },
   { nombre:"Pilar Luján",               email:"plujan@csi-ing.com", tel:"" },
@@ -1280,7 +1277,6 @@ const PERSONAS = [
   { nombre:"Rafael Guasp",              email:"rguasp@csi-ing.com", tel:"" },
   { nombre:"Rafael Monestier",          email:"rmonestier@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rafael Pirez",              email:"rpirez@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Rafael Mateo",              email:"rmateo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ramiro Alonso",             email:"ralonso@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ramiro Antunez",            email:"rantunez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ramiro Javier",             email:"rjavier@csi-ing.com", tel:"", verificar:true },
@@ -1320,7 +1316,6 @@ const PERSONAS = [
   { nombre:"Rodrigo Perpecto",          email:"rperpecto@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rodrigo Rivera",            email:"rrivera@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rodrigo Santos",            email:"rsantos@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Rodrigo Taborda",           email:"rtaborda@csi-ing.com", tel:"", verificar:true},
   { nombre:"Rodriguez Bernardo",        email:"rbernardo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rolando Sclavi",            email:"rsclavi@csi-ing.com", tel:"", verificar:true },
   { nombre:"Romina Barrios",            email:"rbarrios@csi-ing.com", tel:"", verificar:true },
@@ -1328,7 +1323,6 @@ const PERSONAS = [
   { nombre:"Rosa Larrosa",              email:"rlarrosa@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rosa Moraes",               email:"rmoraes@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rosa Silva",                email:"rsilva@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Rosana Guerrero",           email:"rguerrero@csi-ing.com", tel:"", verificar:true },
   { nombre:"Rosina Castiglioni",        email:"rcastiglioni@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ruben Alejandro",           email:"ralejandro@csi-ing.com", tel:"", verificar:true },
   { nombre:"Ruben Barco",               email:"rbarco@csi-ing.com", tel:"", verificar:true },
@@ -1382,7 +1376,6 @@ const PERSONAS = [
   { nombre:"Sebastian Ortiz",           email:"sortiz@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sebastian Parmuchi",        email:"sparmuchi@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sebastian Pereyra",         email:"spereyra@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Sebastian Rabelo Clavijo",  email:"srabelo@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sebastian Rodriguez",       email:"srodriguez@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sebastian Rosenblatt",      email:"srosenblatt@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sebastian Rossi",           email:"srossi@csi-ing.com", tel:"", verificar:true },
@@ -1407,7 +1400,6 @@ const PERSONAS = [
   { nombre:"Sofia Ceriotti",            email:"sceriotti@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sofia Donatti",             email:"sdonatti@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sofia Garrett",             email:"sgarrett@csi-ing.com", tel:"", verificar:true },
-  { nombre:"Sofia Roble",               email:"sroble@csi-ing.com", tel:"", verificar:true },
   { nombre:"Sofia Suberbie",            email:"ssuberbie@csi-ing.com", tel:"" },
   { nombre:"Sofia Zunino",              email:"szunino@csi-ing.com", tel:"", verificar:true },
   { nombre:"Stefani Cardozo",           email:"stcardozo@csi-ing.com", tel:"" },
@@ -2006,7 +1998,8 @@ async function elegirPersona(persona){
 }
 const cerrarPin=()=>{ const w=$("pinWrap"); w.hidden=true; w.innerHTML=""; };
 function mostrarPin(persona, u){
-  const nuevo=!u, primerNombre=persona.nombre.split(/\s+/)[0], w=$("pinWrap");
+  /* Sin pinHash = todavía no creó su PIN, aunque el documento ya exista (por ejemplo, solo confirmó sus datos) */
+  const nuevo=!u || !u.pinHash, primerNombre=persona.nombre.split(/\s+/)[0], w=$("pinWrap");
   w.innerHTML=`<div class="pincard">
       <div class="pintitle">Hola, ${esc(primerNombre)}</div>
       <p class="pinsub">${nuevo
@@ -2030,7 +2023,8 @@ function mostrarPin(persona, u){
       const v2=(($("pin2").value)||"").trim();
       if(v1!==v2){ $("pinMsg").textContent="Los dos PIN no coinciden."; return; }
       const hash=await hashPin(persona.email, v1);
-      try{ await Store.setUsuario(persona.email,{ nombre:persona.nombre, pinHash:hash, creado:Date.now() }); }
+      /* actualizarUsuario combina con lo que ya hay: no pisa la confirmación de datos, el celular ni la libreta */
+      try{ await Store.actualizarUsuario(persona.email,{ nombre:persona.nombre, pinHash:hash, creado:Date.now() }); }
       catch(e){ console.error(e); $("pinMsg").textContent="No se pudo guardar. Reintentá."; return; }
       cerrarPin(); entrar(persona);
     } else {
