@@ -254,6 +254,7 @@
     <div id="modeNote" class="modenote"></div>
 
     <div id="avisoMio" hidden></div>
+    <div id="avisoCambio" hidden></div>
 
     <section class="card">
       <label class="fld">Día</label>
@@ -326,8 +327,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v10.2</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v10.3</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v10.3 · cambio de vehículo por cruce de llaves · corregir una devolución ya registrada
          v10.2 · PIN obligatorio aunque ya haya confirmado sus datos (usuario sin pinHash = nuevo)
          v10.1 · Mauro Bruzzone
          v10.0 · Eugenio Regules
@@ -1877,8 +1879,8 @@ function derivarDia(){
 }
 function subscribe(){
   const [d,h]=ventanaAgenda();
-  Store.onAgenda(d,h,(l)=>{ state.agenda=l; derivarDia(); renderAutos(); renderDia(); renderMisReservas(); renderAvisoMio(); renderConfirm(); });
-  Store.onPendientes((l)=>{ state.pendientes=l; renderPendientes(); renderAvisoMio(); renderAutos(); });
+  Store.onAgenda(d,h,(l)=>{ state.agenda=l; derivarDia(); renderAutos(); renderDia(); renderMisReservas(); renderAvisoMio(); renderAvisoCambio(); renderConfirm(); });
+  Store.onPendientes((l)=>{ state.pendientes=l; renderPendientes(); renderAvisoMio(); renderAvisoCambio(); renderAutos(); });
   Store.onCC((l)=>{ state.ccs=l.slice().sort((a,b)=>(b.usos||0)-(a.usos||0)); });
   Store.onVehiculos((l)=>{ const m={}; l.forEach(v=>{ m[v.id]=v; }); state.autos=m; });
   Store.onUsuarios((l)=>{ const t={}, lb={}, co={};
@@ -2366,6 +2368,8 @@ function renderDia(){
     if(!dev && (mio||soyAdmin())) acts.push(`<button class="btn ok tiny" data-dev="${esc(r.id)}">Registrar devolución</button>`);
     if(!dev && mio) acts.push(`<button class="btn ghost tiny" data-demora="${esc(r.id)}">Voy a demorar</button>`);
     if(!dev && mio) acts.push(`<button class="btn ghost tiny" data-cal="${esc(r.id)}">📅 Recordarme</button>`);
+    if(r.cambioVehiculo && r.vehiculoOriginal) tags.push(`<span class="tag demora">🔁 cambio de vehículo · tenía reservado ${esc(veh(r.vehiculoOriginal)?veh(r.vehiculoOriginal).nombre:r.vehiculoOriginal)}</span>`);
+    if(!dev && puedeCambiarVehiculo(r)) acts.push(`<button class="btn ghost tiny" data-cambio="${esc(r.id)}">🔁 ${mio?"Me dieron otro auto":"Cambiar vehículo"}</button>`);
     if(mio||soyAdmin()) acts.push(`<button class="btn ghost tiny" data-del="${esc(r.id)}">Cancelar</button>`);
     if(dev) acts.push(`<button class="btn ghost tiny" data-ver="${esc(r.id)}">Ver detalle</button>`);
     return `<div class="row${!dev&&est==="atrasada"?" late":""}">
@@ -2403,6 +2407,7 @@ function renderAvisoMio(){
         <div class="row-acts">
           <button class="btn ok tiny" data-dev="${esc(r.id)}">Registrar devolución</button>
           <button class="btn ghost tiny" data-demora="${esc(r.id)}">Voy a demorar</button>
+          ${puedeCambiarVehiculo(r)?`<button class="btn ghost tiny" data-cambio="${esc(r.id)}">🔁 Me dieron otro auto</button>`:""}
         </div></div>`;
     }).join("")}</div></div>`;
 }
@@ -2746,7 +2751,8 @@ function tablaCostos(C){
   const {filas,total,sinAsignar,vehs,diasMes}=C;
   const botonCargo=`<div class="btnrow"><button class="btn ghost tiny" data-nuevocargo>➕ Registrar multa o siniestro</button>
     <button class="btn ghost tiny" data-limpiarcc>🧹 Borrar todo lo de un centro de costo</button>
-    <button class="btn ghost tiny" data-corregirkm>🔢 Corregir el odómetro de un auto</button></div>`;
+    <button class="btn ghost tiny" data-corregirkm>🔢 Corregir el odómetro de un auto</button>
+    <button class="btn ghost tiny" data-listacambio>🔁 Corregir un cruce de vehículos</button></div>`;
   const listaCargos = state.cargos.length
     ? `<div class="rowlist">${state.cargos.map(g=>{ const v=veh(g.vehiculo);
         return `<div class="row"><div class="row-main">
@@ -2957,7 +2963,7 @@ async function borrarCargo(id){
   if(!confirm(`¿Borrar el cargo de ${moneda(g.monto)} (${g.tipo})?`)) return;
   try{ await Store.borrarCargo(id); toast("Cargo borrado."); }catch(e){ console.error(e); toast("No se pudo borrar."); }
 }
-function renderAll(){ renderStrip(); renderTurnos(); derivarDia(); renderAutos(); renderExterno(); renderDia(); renderMisReservas(); renderPendientes(); renderAvisoMio(); renderConfirm(); }
+function renderAll(){ renderStrip(); renderTurnos(); derivarDia(); renderAutos(); renderExterno(); renderDia(); renderMisReservas(); renderPendientes(); renderAvisoMio(); renderAvisoCambio(); renderConfirm(); }
 
 /* ════════ MODAL GENÉRICO ════════ */
 const cerrarModal=()=>{ const w=$("modalWrap"); w.hidden=true; w.innerHTML=""; };
@@ -3584,7 +3590,8 @@ function buscarReserva(id){
   return state.agenda.find(r=>r.id===id) || state.pendientes.find(r=>r.id===id) || state.mes.find(r=>r.id===id) || null;
 }
 function abrirDevolucion(id){
-  const r=buscarReserva(id); if(!r){ toast("No encontramos esa reserva."); return; }
+  let r=buscarReserva(id); if(!r){ toast("No encontramos esa reserva."); return; }
+  if(r.devuelto) r=filaPrincipal(r);   // al corregir, se trabaja sobre la fila que guarda el odómetro y los gastos
   if(!puedeGestionar(r)){ toast(`Esa reserva es de ${primerNombre(r.nombre)}. La devolución la registra esa persona o un administrador.`); return; }
   const v=veh(r.vehiculo);
   const ULTKM=ultimoKm(r.vehiculo, r.id), CTXKM=contextoKm(r);
@@ -3601,6 +3608,8 @@ function abrirDevolucion(id){
     <p class="pinsub">${RANGO} · ${esc(r.nombre)} · CC ${esc(r.cc||"—")}<br>
       Comprometido: <b>${esc(r.horaDevolucion||horaLimite(r))}</b>${r.demoraHora?` · demora avisada: <b>${esc(r.demoraHora)}</b>`:""}${
       r.combSalida?`<br>Retiró con nafta: <b>${esc(r.combSalida)}</b>`:""}</p>
+    ${(!r.devuelto && puedeCambiarVehiculo(r))?`<div class="hint" style="margin:-4px 0 12px">¿El auto que se usó no es este?
+      <button type="button" class="btn ghost tiny" data-cambio="${esc(r.id)}">🔁 ${esMia(r)?"Me dieron otro auto":"Cambiar vehículo"}</button></div>`:""}
     ${DOSCC?`<div class="aviso-box">💼 Esta salida se reparte entre <b>${CCS.map(x=>`${esc(x.cc)} (${Math.round(x.pct)}%)`).join("</b> y <b>")}</b>.
       Indicá a qué proyecto va cada gasto.</div>`:""}
     ${TRAMO.length>1?`<div class="aviso-box">🗓️ Esta salida abarca <b>${TRAMO.length} días seguidos</b>.
@@ -3739,18 +3748,24 @@ async function guardarDevolucion(r){
   if(hayEstac==="si" && estac<=0){ $("dMsg").textContent="Poné cuánto pagaste de estacionamiento."; return; }
   if(imprev>0 && !imprevDet){ $("dMsg").textContent="Aclará de qué fue el gasto imprevisto."; return; }
   const ts=ahoraMs();
-  const base={ devuelto:true, devueltoTs:ts, devueltoPor:state.nombre,
+  /* Si la salida ya estaba devuelta, esto es una CORRECCIÓN: se reescriben las filas
+     que se cerraron juntas y se conserva la fecha y hora de la devolución original. */
+  const CORR=!!r.devuelto;
+  const FILAS = CORR ? [r].concat(filasSalida(r).filter(x=>x.id!==r.id)) : hermanas(r, true);
+  const tsDev = CORR ? (r.devueltoTs||ts) : ts;
+  const base={ devuelto:true, devueltoTs:tsDev, devueltoPor: CORR ? (r.devueltoPor||state.nombre) : state.nombre,
     combLlegada:comb, comentarioLlegada:obs, requiereService:serv,
     sinPeaje: hayPeaje==="no", sinEstac: hayEstac==="no", detalleImprev:imprevDet, pagoNafta: gasto>0?pago:"",
     ccNafta:  ($("dCCNafta") ||{}).value || "",
     ccPeaje:  ($("dCCPeaje") ||{}).value || "",
     ccEstac:  ($("dCCEstac") ||{}).value || "",
     ccImprev: ($("dCCImprev")||{}).value || "", nivelEstac: nivel };
+  if(CORR){ base.corregidoPor=state.nombre; base.corregidoTs=ts; }
   let n=0;
   /* Una salida puede abarcar varios días y turnos: se cierran todas sus filas,
      pero el kilometraje y los gastos se guardan UNA sola vez, en la primera,
      para no duplicar totales ni repetir el odómetro en el reporte.            */
-  for(const ex of hermanas(r, true)){
+  for(const ex of FILAS){
     try{ await Store.actualizar(ex.id, Object.assign({}, base, { kmLlegada: n===0?km:null,
       gastoNafta: n===0?gasto:0, gastoPeaje: n===0?peaje:0,
       gastoEstac: n===0?estac:0, gastoImprev: n===0?imprev:0 })); n++; }
@@ -3761,19 +3776,20 @@ async function guardarDevolucion(r){
      ese número ya lo dejó una salida posterior.                            */
   const prev=ultimoKm(r.vehiculo, r.id);
   if(!CTX.atrasada && (!prev || km>=prev.km)){
-    const idRef=(hermanas(r,true)[0]||r).id;
+    const idRef=(FILAS[0]||r).id;
     try{ await Store.actualizarVehiculo(r.vehiculo,{
       id:r.vehiculo, ultimoKm:km, ultimoKmFecha:r.fecha, ultimoKmPor:state.nombre, ultimoKmId:idRef, ultimoKmTs:ts }); }
     catch(e){ console.error(e); }
   }
   cerrarModal();
+  if(CORR){ toast(n ? "Devolución corregida." : "No se pudo guardar la corrección. Reintentá."); return; }
   const lim=enHora(r.fecha, r.horaDevolucion||horaLimite(r)).getTime();
   toast(serv ? `Devolución registrada (${sellaFechaHora(ts)}). Queda avisado que necesita service 🔧`
      : ts>lim+5*60000 ? `Devolución registrada (${sellaFechaHora(ts)}). Quedó fuera de hora, pero está registrada.`
      : `Devolución registrada (${sellaFechaHora(ts)}). ¡Gracias!`);
 }
 function verDetalle(id){
-  const r=buscarReserva(id); if(!r) return; const v=veh(r.vehiculo);
+  let r=buscarReserva(id); if(!r) return; if(r.devuelto) r=filaPrincipal(r); const v=veh(r.vehiculo);
   const lim=enHora(r.fecha, r.horaDevolucion||horaLimite(r)).getTime();
   const tarde=r.devueltoTs && r.devueltoTs>lim+5*60000;
   abrirModal(`
@@ -3792,11 +3808,241 @@ function verDetalle(id){
         <div class="row-meta">Estacionamiento, nivel ${esc(r.nivelEstac)}</div></div></div>`:""}
       <div class="row"><div class="row-main"><div class="row-nm">Odómetro</div><div class="row-meta">${r.kmSalida||"—"} → ${r.kmLlegada||"—"}${(r.kmSalida&&r.kmLlegada)?` (${r.kmLlegada-r.kmSalida} km)`:""}</div></div></div>
       <div class="row"><div class="row-main"><div class="row-nm">Observaciones</div><div class="row-meta">Salida: ${esc(r.comentarioSalida||"—")}<br>Devolución: ${esc(r.comentarioLlegada||"—")}</div></div></div>
+      ${(r.cambioVehiculo && r.vehiculoOriginal)?`<div class="row warn"><div class="row-main"><div class="row-nm">🔁 Cambio de vehículo</div>
+        <div class="row-meta">${esc(textoCambio(r))}</div></div></div>`:""}
       ${r.requiereService?`<div class="row late"><div class="row-main"><div class="row-nm">🔧 Requiere service</div><div class="row-meta">${esc(r.comentarioLlegada||"")}</div></div></div>`:""}
     </div>
     <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button>
+      ${soyAdmin()?`<button class="btn ghost" data-cambio="${esc(r.id)}">🔁 Cambiar vehículo</button>`:""}
       ${(r.ownerUid===state.uid||soyAdmin())?`<button class="btn" data-reabrir>Corregir devolución</button>`:""}</div>`,
     (w)=>{ const b=w.querySelector("[data-reabrir]"); if(b) b.addEventListener("click",()=>{ cerrarModal(); abrirDevolucion(r.id); }); });
+}
+
+/* ════════ CAMBIO DE VEHÍCULO (cruce de llaves) ════════
+   Cuando a alguien le entregan las llaves del otro auto, la salida se pasa al
+   vehículo que se usó de verdad. Si ese auto lo tenía reservado otra persona,
+   las dos salidas se intercambian. Queda anotado quién lo registró y cuándo.
+   El kilometraje y los gastos ya cargados viajan con la salida.               */
+const porFecha=(a,b)=> a.fecha<b.fecha?-1 : a.fecha>b.fecha?1 : ordenBloque(a.bloque)-ordenBloque(b.bloque);
+/* Filas que forman una salida: si está abierta, todo el tramo sin devolver;
+   si ya se devolvió, las filas que se cerraron juntas.                       */
+function filasSalida(r){
+  let l = !r.devuelto ? hermanas(r, true)
+    : todasLasFilas().filter(x=> x.devuelto && !x.cancelada && x.ownerUid===r.ownerUid
+        && x.vehiculo===r.vehiculo && x.devueltoTs===r.devueltoTs);
+  if(!l.some(x=>x.id===r.id)) l=l.concat([r]);
+  return l.slice().sort(porFecha);
+}
+/* La fila que guarda el odómetro y los gastos de la salida */
+const filaPrincipal=(r)=>{ const l=filasSalida(r); return l.find(x=>x.kmLlegada) || l[0] || r; };
+const rangoSalida=(filas)=>{ const d=[...new Set(filas.map(x=>x.fecha))].sort();
+  return d.length>1 ? `${fechaCorta(d[0])} al ${fechaLarga(d[d.length-1])}` : fechaLarga(d[0]); };
+const nomVeh=(id)=>{ const v=veh(id); return v?v.nombre:id; };
+/* El usuario lo registra mientras su salida está abierta y ya empezó;
+   un administrador puede corregir cualquier salida, también las devueltas. */
+function puedeCambiarVehiculo(r){
+  if(!r || r.cancelada) return false;
+  if(soyAdmin()) return true;
+  if(!esMia(r) || r.devuelto) return false;
+  return filasSalida(r)[0].fecha <= ymd(new Date());
+}
+/* Salidas de OTRAS personas con el vehículo destino en los mismos días */
+function contrapartes(filas, vehDestino){
+  const dias=new Set(filas.map(x=>x.fecha)), dueno=filas[0].ownerUid, m=new Map();
+  todasLasFilas().filter(x=> x.vehiculo===vehDestino && !x.cancelada && x.ownerUid!==dueno && dias.has(x.fecha))
+    .forEach(x=>{ const fs=filasSalida(x); const k=fs.map(y=>y.id).sort()[0]; if(!m.has(k)) m.set(k, fs); });
+  return [...m.values()].sort((a,b)=>porFecha(a[0],b[0]));
+}
+/* Reservas abiertas de terceros que quedarían pisadas por el cambio */
+function crucesCambio(movs){
+  const ids=new Set(movs.map(m=>m.fila.id)), out=new Map();
+  movs.forEach(({fila,a})=>{ if(fila.devuelto) return;
+    todasLasFilas().forEach(x=>{
+      if(ids.has(x.id) || x.cancelada || x.devuelto || x.ownerUid===fila.ownerUid) return;
+      if(x.vehiculo===a && x.fecha===fila.fecha && x.bloque===fila.bloque) out.set(x.id, x); }); });
+  return [...out.values()].sort(porFecha);
+}
+function textoCambio(r){
+  if(!r || !r.cambioVehiculo || !r.vehiculoOriginal) return "";
+  return `Reservó ${nomVeh(r.vehiculoOriginal)} y usó ${nomVeh(r.vehiculo)}`
+    + (r.cambioCon?` · intercambio con ${r.cambioCon}`:"")
+    + ` · lo registró ${r.cambioPor||"—"}${r.cambioTs?` el ${sellaFechaHora(r.cambioTs)}`:""}`
+    + (r.cambioNota?` · ${r.cambioNota}`:"");
+}
+function abrirCambio(id){
+  const r0=buscarReserva(id); if(!r0){ toast("No encontramos esa reserva."); return; }
+  if(!puedeCambiarVehiculo(r0)){
+    toast(!esMia(r0) ? `Esa reserva es de ${primerNombre(r0.nombre)}. El cambio lo registra esa persona o una administradora.`
+        : r0.devuelto ? "Esa salida ya está devuelta: pedile a una administradora que la corrija."
+        : "El cambio se registra a partir del día de la salida.");
+    return; }
+  const filas=filasSalida(r0), r=filas[0], mio=esMia(r);
+  const otros=VEHICULOS.filter(x=>x.id!==r.vehiculo);
+  if(!otros.length){ toast("No hay otro vehículo en la flota."); return; }
+  const variosDias=new Set(filas.map(x=>x.fecha)).size>1;
+  let contras=[];
+  abrirModal(`
+    <div class="pintitle">🔁 ${mio?"Me dieron otro auto":"Cambiar el vehículo de una salida"}</div>
+    <p class="pinsub">${esc(r.nombre)} · ${rangoSalida(filas)} · CC ${esc(r.cc||"—")}<br>
+      En la app figura con <b>${esc(nomVeh(r.vehiculo))}</b>${r.devuelto?" · salida ya devuelta":""}.</p>
+    <div class="frow"><label class="fld">¿Qué vehículo se usó en realidad? *</label>
+      <div class="opts" id="cvVeh">${otros.map(o=>`<label class="opt${otros.length===1?" sel":""}">
+        <input type="radio" name="cvveh" value="${esc(o.id)}"${otros.length===1?" checked":""} /><span>${o.emoji} ${esc(o.nombre)} · ${esc(o.matricula)}</span></label>`).join("")}</div></div>
+    <div id="cvCon"></div>
+    <div class="frow"><label class="fld">Aclaración (opcional)</label>
+      <textarea id="cvNota" placeholder="Ej: al retirar entregaron las llaves cruzadas."></textarea></div>
+    <div class="hint">${r.devuelto
+      ? "El kilometraje y los gastos ya cargados pasan al otro vehículo junto con la salida."
+      : "Al devolver, se cargan el kilometraje y los gastos del auto que se usó de verdad."}</div>
+    <div class="pinmsg" id="cvMsg"></div>
+    <div class="pinactions">
+      <button class="btn ghost" data-close>Cancelar</button>
+      <button id="cvOk" class="btn">Registrar el cambio</button>
+    </div>`, (w)=>{
+      const marcar=(box)=> box.querySelectorAll(".opt").forEach(o=>o.classList.toggle("sel", o.querySelector("input").checked));
+      const destino=()=> (w.querySelector('input[name="cvveh"]:checked')||{}).value||"";
+      const pintar=()=>{
+        const d=destino(), box=$("cvCon");
+        contras = d ? contrapartes(filas, d) : [];
+        if(!d){ box.innerHTML=""; return; }
+        if(!contras.length){
+          box.innerHTML=`<div class="aviso-box">${esc(nomVeh(d))} no tenía otra reserva en ${variosDias?"esos días":"ese día"}: solo se cambia esta salida.</div>`;
+          return; }
+        box.innerHTML=`<div class="frow"><label class="fld">${esc(nomVeh(d))} estaba reservado. ¿Con quién se cruzaron las llaves? *</label>
+          <div class="opts" id="cvConOpts">${contras.map((c,i)=>`<label class="opt${i===0?" sel":""}" style="flex-basis:100%">
+              <input type="radio" name="cvcon" value="${i}"${i===0?" checked":""} /><span>Intercambiar con ${esc(c[0].nombre)} · ${rangoSalida(c)}${c[0].devuelto?" · ya devuelta":""}</span></label>`).join("")}
+            <label class="opt" style="flex-basis:100%"><input type="radio" name="cvcon" value="solo" /><span>Con nadie: solo se cambia esta salida</span></label></div>
+          <div class="hint">Al intercambiar, la otra salida pasa a figurar con ${esc(nomVeh(r.vehiculo))}. Esa persona ve el aviso al entrar a la app.</div></div>`;
+        $("cvConOpts").addEventListener("change", ()=>marcar($("cvConOpts")));
+      };
+      $("cvVeh").addEventListener("change", ()=>{ marcar($("cvVeh")); pintar(); });
+      pintar();
+      $("cvOk").addEventListener("click", ()=>{
+        const d=destino(); if(!d){ $("cvMsg").textContent="Elegí qué vehículo se usó."; return; }
+        const sel=(w.querySelector('input[name="cvcon"]:checked')||{}).value;
+        const contra=(sel!==undefined && sel!=="solo") ? contras[parseInt(sel,10)] : null;
+        aplicarCambio(filas, d, contra||null, ($("cvNota").value||"").trim());
+      });
+  });
+}
+async function aplicarCambio(filas, destino, contra, nota){
+  if(!puedeCambiarVehiculo(filas[0])){ cerrarModal(); toast("No podés registrar este cambio."); return; }
+  const origen=filas[0].vehiculo;
+  const movs=filas.map(f=>({fila:f, a:destino, con: contra?contra[0].nombre:""}))
+    .concat((contra||[]).map(f=>({fila:f, a:origen, con:filas[0].nombre})));
+  const cruces=crucesCambio(movs);
+  if(cruces.length){ const x=cruces[0];
+    $("cvMsg").textContent=`No se puede aplicar: ${nomVeh(x.vehiculo)} lo tiene reservado ${x.nombre} el ${fechaLarga(x.fecha)}`
+      + ` (${bloque(x.bloque)?bloque(x.bloque).label:x.bloque}). `
+      + (soyAdmin() ? "Cancelá o mové esa reserva primero." : "Avisale a una administradora para que lo resuelva.");
+    return; }
+  const ok=$("cvOk"); if(ok) ok.disabled=true;
+  const ts=ahoraMs(); let fallo=0;
+  for(const m of movs){
+    const orig=m.fila.vehiculoOriginal||m.fila.vehiculo;
+    try{ await Store.actualizar(m.fila.id, { vehiculo:m.a, vehiculoOriginal:orig, cambioVehiculo: orig!==m.a,
+      cambioPor:state.nombre, cambioUid:state.uid, cambioTs:ts, cambioNota:nota, cambioCon:m.con }); }
+    catch(e){ console.error(e); fallo++; }
+  }
+  if(fallo===movs.length){ if(ok) ok.disabled=false; $("cvMsg").textContent="No se pudo guardar. Reintentá."; return; }
+  try{ await recalcularOdometros(movs, [origen, destino]); }catch(e){ console.error(e); }
+  derivarDia(); renderAutos(); renderDia(); renderPendientes(); renderAvisoMio(); renderAvisoCambio(); renderStats();
+
+  const partes=[{f:filas, v:destino, otro:origen}].concat(contra?[{f:contra, v:origen, otro:destino}]:[]);
+  const hayCerradas=movs.some(m=>m.fila.devuelto);
+  const actorEsParte=partes.some(x=>x.f[0].ownerUid===state.uid);
+  abrirModal(`
+    <div class="pintitle">✅ Cambio registrado</div>
+    <p class="pinsub">${contra?"Las dos salidas quedaron":"La salida quedó"} con el vehículo que se usó de verdad.</p>
+    ${fallo?`<div class="aviso-box" style="background:var(--ocup-bg); border-color:#f0b3b3; color:var(--ocup-tx)">
+      ${fallo} registro(s) no se pudieron guardar. Revisá el detalle y repetí el cambio si hace falta.</div>`:""}
+    <div class="rowlist">${partes.map(x=>{
+      const p=x.f[0], ajeno=p.ownerUid!==state.uid, tel=telDe(p.ownerUid), cerrada=!!p.devuelto;
+      const msg = actorEsParte
+        ? `Hola ${primerNombre(p.nombre)}, soy ${state.nombre}. Te aviso que hubo un cruce de llaves: yo me llevé el ${nomVeh(x.otro)} `
+          + `y a vos te quedó el ${nomVeh(x.v)}. Ya lo corregí en la app: tu reserva del ${fechaLarga(p.fecha)} ahora figura con el ${nomVeh(x.v)}. `
+          + (cerrada?"":"Cuando lo devuelvas, registrá la devolución con los datos de ese auto, por favor. ") + `¡Gracias!`
+        : `Hola ${primerNombre(p.nombre)}, soy ${state.nombre}. Te aviso que corregimos en la app un cruce de llaves: `
+          + `tu salida del ${fechaLarga(p.fecha)} ahora figura con el ${nomVeh(x.v)}. `
+          + `Si ves algo que no coincide, avisame, por favor. ¡Gracias!`;
+      const ref=(x.f.find(y=>y.kmLlegada)||p).id;
+      return `<div class="row"><div class="row-main">
+        <div class="row-nm">${esc(p.nombre)} → ${veh(x.v)?veh(x.v).emoji:"🚗"} ${esc(nomVeh(x.v))}</div>
+        <div class="row-meta">${rangoSalida(x.f)} · antes figuraba con ${esc(nomVeh(x.otro))}${cerrada?" · ya devuelta":""}</div></div>
+        <div class="row-acts">
+          ${(cerrada && soyAdmin())?`<button class="btn ghost tiny" data-ver="${esc(ref)}">Revisar devolución</button>`:""}
+          ${ajeno?(tel?`<button class="btn wa tiny" data-wach="${esc(tel)}" data-msg="${esc(msg)}">💬 Avisar</button>`:"")
+            +`<button class="btn ghost tiny" data-copch="${esc(msg)}">📋 Copiar aviso</button>`:""}
+        </div></div>`; }).join("")}</div>
+    ${hayCerradas?`<div class="aviso-box" style="margin-top:12px">Las devoluciones ya registradas pasaron al otro vehículo con su kilometraje y sus gastos.
+      Si al devolver se cargó un kilometraje que no era el del tablero, corregilo con <b>Revisar devolución</b>
+      y verificá el odómetro de cada auto.</div>
+      <div class="btnrow"><button class="btn ghost tiny" data-corregirkm>🔢 Verificar el odómetro</button></div>`:""}
+    <div class="pinactions"><button class="btn" data-close>Listo</button></div>`, (w)=>{
+      w.querySelectorAll("[data-wach]").forEach(b=>b.addEventListener("click",()=>window.open(linkWA(b.dataset.wach, b.dataset.msg),"_blank")));
+      w.querySelectorAll("[data-copch]").forEach(b=>b.addEventListener("click",()=>copiar(b.dataset.copch)));
+  });
+}
+/* Si una lectura de odómetro cambió de auto, la referencia de cada vehículo se vuelve a calcular */
+async function recalcularOdometros(movs, vehs){
+  if(!movs.some(m=>m.fila.kmLlegada)) return;
+  const nuevo=new Map(movs.map(m=>[m.fila.id, m.a]));
+  const filas=todasLasFilas().map(x=> nuevo.has(x.id) ? Object.assign({}, x, {vehiculo:nuevo.get(x.id)}) : x);
+  for(const vid of vehs){
+    const a=state.autos[vid]||{};
+    const lect=filas.filter(x=>x.vehiculo===vid && x.kmLlegada && !x.cancelada)
+      .sort((p,q)=>(q.devueltoTs||0)-(p.devueltoTs||0))[0]||null;
+    const seFue=!!(a.ultimoKmId && nuevo.has(a.ultimoKmId) && nuevo.get(a.ultimoKmId)!==vid);
+    const masNueva=!!(lect && (lect.devueltoTs||0)>(a.ultimoKmTs||0));
+    if(!seFue && !masNueva) continue;
+    await Store.actualizarVehiculo(vid, lect
+      ? { id:vid, ultimoKm:lect.kmLlegada, ultimoKmFecha:lect.fecha, ultimoKmPor:lect.devueltoPor||lect.nombre||"",
+          ultimoKmId:lect.id, ultimoKmTs:lect.devueltoTs||1, corregido:false }
+      : { id:vid, ultimoKm:0, ultimoKmFecha:"", ultimoKmPor:"", ultimoKmId:"", ultimoKmTs:0, corregido:false });
+  }
+}
+/* Solo admin: elegir una salida (abierta o ya devuelta) para cambiarle el vehículo */
+function abrirListaCambio(){
+  if(!soyAdmin()){ toast("Solo un administrador puede hacer esto."); return; }
+  const m=new Map();
+  todasLasFilas().filter(x=>!x.cancelada).forEach(x=>{
+    const fs=filasSalida(x), p=fs.find(y=>y.kmLlegada)||fs[0];
+    if(!m.has(p.id)) m.set(p.id, {p, fs}); });
+  const lista=[...m.values()].sort((a,b)=>porFecha(b.fs[0], a.fs[0]));
+  abrirModal(`
+    <div class="pintitle">🔁 Corregir un cruce de vehículos</div>
+    <p class="pinsub">Elegí la salida que quedó registrada con el auto equivocado. Si el otro auto lo tenía otra persona,
+      la app te ofrece intercambiar las dos salidas en un solo paso.</p>
+    ${lista.length?`<div class="rowlist" style="max-height:46vh; overflow-y:auto">${lista.map(({p,fs})=>{ const v=veh(p.vehiculo);
+      return `<div class="row${p.devuelto?"":" warn"}"><div class="row-main">
+        <div class="row-nm">${v?v.emoji:"🚗"} ${esc(nomVeh(p.vehiculo))} · ${esc(p.nombre)}</div>
+        <div class="row-meta">${rangoSalida(fs)} · CC ${esc(p.cc||"—")} · ${p.devuelto?`devuelta${p.kmLlegada?` · ${p.kmLlegada.toLocaleString("es-UY")} km`:""}`:"sin devolver"}${
+          p.cambioVehiculo?` · 🔁 ya tuvo un cambio`:""}</div></div>
+        <div class="row-acts">
+          ${p.devuelto?`<button class="btn ghost tiny" data-ver="${esc(p.id)}">Ver detalle</button>`:""}
+          <button class="btn tiny" data-cambio="${esc(p.id)}">🔁 Cambiar vehículo</button></div></div>`; }).join("")}</div>`
+      : `<div class="empty">No hay salidas para mostrar.</div>`}
+    <div class="hint" style="margin-top:10px">Se listan las salidas de ${esc(nombreMes())}, las próximas y las que siguen sin devolver.
+      Para corregir una de otro mes, cambiá el mes en Estadísticas y volvé a abrir esta lista.</div>
+    <div class="pinactions"><button class="btn ghost" data-close>Cerrar</button></div>`);
+}
+/* Aviso para la persona a la que otro le cambió el vehículo de una salida abierta */
+function renderAvisoCambio(){
+  const el=$("avisoCambio"); if(!el) return;
+  const m=new Map();
+  [...state.agenda, ...state.pendientes].forEach(r=>{
+    if(r.ownerUid!==state.uid || r.devuelto || r.cancelada || !r.cambioVehiculo || r.cambioUid===state.uid) return;
+    const k=claveSalida(r); if(!m.has(k) || r.fecha<m.get(k).fecha) m.set(k, r); });
+  const l=[...m.values()].sort(porFecha);
+  if(!l.length){ el.hidden=true; el.innerHTML=""; return; }
+  el.hidden=false;
+  el.innerHTML=`<div class="alerta amarilla">
+    <h3>🔁 Cambió el vehículo de tu reserva</h3>
+    ${l.map(r=>`<p>Tu salida del <b>${fechaLarga(r.fecha)}</b> ahora figura con <b>${esc(nomVeh(r.vehiculo))}</b>
+      (tenías reservado ${esc(nomVeh(r.vehiculoOriginal))}). Lo registró ${esc(r.cambioPor||"—")}${
+      r.cambioCon?` por un cruce de llaves con ${esc(r.cambioCon)}`:""}.</p>`).join("")}
+    <p>Al devolver, cargá el kilometraje y los gastos de ese auto. Si no es correcto, avisale a una administradora.</p>
+  </div>`;
 }
 
 /* ════════ EXPORTAR A EXCEL (.xlsx) ════════ */
@@ -3857,7 +4103,7 @@ async function exportarExcel(){
     "Hora comprometida","Vuelve el (demora)","Demora avisada","Devuelto","En hora","Km al devolver",
     "Nafta","Pago nafta","Peajes","Estacionamiento","Imprevistos","Detalle imprevisto","Nivel estac.","Cargada por"];
   if(admin) cab.push("Alquiler imputado","Costo total del uso");
-  cab.push("Requiere service","Obs. al retirar","Obs. al devolver");
+  cab.push("Requiere service","Obs. al retirar","Obs. al devolver","Cambio de vehículo");
   /* "Cargada por" queda al final de los gastos, antes de los datos de service */
   const filas=[cab];
   usos.forEach(u=>{
@@ -3875,12 +4121,12 @@ async function exportarExcel(){
       u.gastoNafta||0, u.pagoNafta||"", u.gastoPeaje||0, u.gastoEstac||0, u.gastoImprev||0, u.detalleImprev||"",
       u.nivelEstac?("Nivel "+u.nivelEstac):"", u.cargadaPor||"" ];
     if(admin) f.push(Math.round(alq), Math.round(alq+gastos));
-    f.push(u.requiereService?"Sí":"No", u.comentarioSalida||"", u.comentarioLlegada||"");
+    f.push(u.requiereService?"Sí":"No", u.comentarioSalida||"", u.comentarioLlegada||"", textoCambio(u));
     filas.push(f);
   });
   const anchos=[12,20,11,24,24,13,15,12,15,12,17,8,14,10,16,10,14,12,26,13,20];
   if(admin) anchos.push(15,16);
-  anchos.push(14,34,34);
+  anchos.push(14,34,34,44);
   const ws1=hojaConAnchos(X, filas, anchos, [0]);
   ws1["!autofilter"]={ref:X.utils.encode_range({s:{r:0,c:0},e:{r:filas.length-1,c:cab.length-1}})};
   X.utils.book_append_sheet(wb, ws1, "Usos");
@@ -4031,6 +4277,8 @@ document.body.addEventListener("click", e=>{
     copiar(l.join("\n")); return;
   }
   const cl=e.target.closest("[data-confirmarllave]"); if(cl){ confirmarLlave(cl.dataset.confirmarllave); return; }
+  const cv=e.target.closest("[data-cambio]"); if(cv){ abrirCambio(cv.dataset.cambio); return; }
+  if(e.target.closest("[data-listacambio]")){ abrirListaCambio(); return; }
   if(e.target.closest("[data-corregirkm]")){ abrirCorregirKm(); return; }
   const lc=e.target.closest("[data-limpiarcc]"); if(lc){ abrirLimpiarCC(); return; }
   const nk=e.target.closest("[data-nuevocargo]"); if(nk){ abrirCargo(); return; }
