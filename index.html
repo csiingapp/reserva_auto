@@ -327,8 +327,9 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v10.5</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI · <b>v10.6</b>
     <!-- Solo la versión: la descripción del cambio queda acá, invisible en pantalla.
+         v10.6 · el odómetro valida contra la lectura más reciente, no la más alta
          v10.5 · 6 personas: Sebastián Rabelo, Juan Lorenz, Elisa Cooper, Mateo Gutierrez, Agustin Carlis y Pedro Rega
          v10.4 · Martin Zeballos (nombre corregido)
          v10.3 · cambio de vehículo por cruce de llaves · corregir una devolución ya registrada
@@ -1623,12 +1624,13 @@ function lecturasKm(vehId, excluirId){
   if(base) l.push({ km:base, fecha:"", base:true });
   const a=state.autos[vehId];
   if(a && a.ultimoKm && a.ultimoKmId!==excluirId)
-    l.push({ km:a.ultimoKm, fecha:a.ultimoKmFecha||"", nombre:a.ultimoKmPor||"", corregido:!!a.corregido });
+    l.push({ km:a.ultimoKm, fecha:a.ultimoKmFecha||"", nombre:a.ultimoKmPor||"",
+             ts:a.ultimoKmTs||1, corregido:!!a.corregido });
   const vistos=new Map();
   [...state.agenda, ...state.pendientes, ...state.mes].forEach(r=>{ if(r && r.id) vistos.set(r.id, r); });
   vistos.forEach(r=>{
     if(r.vehiculo!==vehId || !r.kmLlegada || r.id===excluirId) return;
-    l.push({ km:r.kmLlegada, fecha:r.fecha, nombre:r.nombre });
+    l.push({ km:r.kmLlegada, fecha:r.fecha, nombre:r.nombre, ts:r.devueltoTs||1 });
   });
   return l;
 }
@@ -1639,8 +1641,15 @@ function contextoKm(r){
   const l=lecturasKm(r.vehiculo, r.id);
   const antes   = l.filter(x=>!x.fecha || x.fecha<=r.fecha);
   const despues = l.filter(x=>x.fecha && x.fecha>r.fecha);
-  const piso = antes.length ? antes.reduce((a,b)=> b.km>a.km?b:a) : null;
-  const techo= despues.length? despues.reduce((a,b)=> b.km<a.km?b:a) : null;
+  /* El piso es la lectura MÁS RECIENTE anterior, no la más alta. Si alguien
+     tipeó mal un número y después se corrigió, manda el corregido: de lo
+     contrario el valor errado quedaba trabando a todos los que vienen atrás. */
+  const cmpFecha=(a,b)=> a>b ? 1 : a<b ? -1 : 0;
+  const masNuevo=(a,b)=> (b.ts||0)-(a.ts||0) || cmpFecha(b.fecha||"", a.fecha||"") || (b.km-a.km);
+  const masViejo=(a,b)=> cmpFecha(a.fecha||"", b.fecha||"") || (a.ts||0)-(b.ts||0);
+  const piso = antes.length ? antes.slice().sort(masNuevo)[0] : null;
+  /* El techo es la lectura inmediatamente posterior, la primera en el tiempo. */
+  const techo= despues.length? despues.slice().sort(masViejo)[0] : null;
   return { piso, techo, atrasada: !!techo };
 }
 /* Kilometraje de referencia de un vehículo.
